@@ -645,6 +645,25 @@ def global_people_photos_zip(request):
 
 
 def start_plate_lookup_process(placa, user):
+    max_processes = int(getattr(settings, 'PLATE_LOOKUP_MAX_PROCESSES', 1) or 1)
+    try:
+        active = subprocess.run(
+            ['ps', '-eo', 'args='],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        active_count = sum(
+            1
+            for line in (active.stdout or '').splitlines()
+            if 'manage.py lookup_plate' in line and 'ps -eo args=' not in line
+        )
+        if active_count >= max_processes:
+            return False
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
     manage_py = settings.BASE_DIR / 'manage.py'
     command = [
         sys.executable,
@@ -661,6 +680,7 @@ def start_plate_lookup_process(placa, user):
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    return True
 
 
 def _plate_lookup_api_payload(record):
