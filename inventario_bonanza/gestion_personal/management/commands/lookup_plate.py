@@ -1,0 +1,43 @@
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+
+from gestion_personal.models import PlateLookupRecord
+from gestion_personal.plate_lookup import consultar_placa_completa, normalize_plate, plate_variants, save_plate_lookup_result
+
+
+class Command(BaseCommand):
+    help = "Consulta una placa en fuentes externas y guarda el respaldo."
+
+    def add_arguments(self, parser):
+        parser.add_argument("placa")
+        parser.add_argument("--user-id", type=int, default=None)
+
+    def handle(self, *args, **options):
+        placa = normalize_plate(options["placa"])
+        user = None
+        if options.get("user_id"):
+            user = get_user_model().objects.filter(pk=options["user_id"]).first()
+
+        record, _ = PlateLookupRecord.objects.update_or_create(
+            placa=placa,
+            defaults={
+                "placa_aliases": plate_variants(options["placa"]),
+                "lookup_status": "running",
+                "last_error": "",
+                "consultado_por": user,
+                "started_at": timezone.now(),
+            },
+        )
+
+        try:
+            result = consultar_placa_completa(placa)
+            record = save_plate_lookup_result(result, user=user)
+            self.stdout.write(self.style.SUCCESS(f"Consulta finalizada: {record.placa} ({record.lookup_status})"))
+        except Exception as exc:
+            PlateLookupRecord.objects.filter(pk=record.pk).update(
+                lookup_status="failed",
+                last_error=str(exc),
+                completed_at=timezone.now(),
+            )
+            raise
