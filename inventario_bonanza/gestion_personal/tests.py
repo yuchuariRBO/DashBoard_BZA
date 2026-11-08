@@ -600,3 +600,152 @@ class PlateLookupQueueTests(TestCase):
         self.assertEqual(pending.lookup_status, 'completed')
         self.assertEqual(stale.lookup_status, 'completed')
         self.assertIn('huérfana', stale.last_error)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class GlobalUserPasswordTests(TestCase):
+    def setUp(self):
+        self.admin = CustomUser.objects.create_user(
+            username='password-admin', password='Original!4829', user_type='global_admin',
+        )
+        self.target = CustomUser.objects.create_user(
+            username='password-target', password='Original!4829', user_type='rh',
+        )
+        self.client.force_login(self.admin)
+
+    def update_user(self, user=None, **changes):
+        user = user or self.target
+        data = {'username': user.username, 'user_type': user.user_type, 'is_active': 'on'}
+        data.update(changes)
+        return self.client.post(reverse('global_user_update', args=[user.pk]), data)
+
+    def test_change_password(self):
+        response = self.update_user(new_password1='Replacement!9274', new_password2='Replacement!9274')
+        self.assertRedirects(response, reverse('global_user_list'))
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.check_password('Replacement!9274'))
+        self.assertFalse(self.target.check_password('Original!4829'))
+
+    def test_blank_password_preserves_hash(self):
+        original = self.target.password
+        self.assertEqual(self.update_user(first_name='Actualizado').status_code, 302)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.password, original)
+        self.assertEqual(self.target.first_name, 'Actualizado')
+
+    def test_invalid_passwords_do_not_save(self):
+        for password, confirmation in [('Replacement!9274', 'different'), ('', 'Replacement!9274'), ('Replacement!9274', ''), ('123', '123')]:
+            with self.subTest(password=password, confirmation=confirmation):
+                response = self.update_user(new_password1=password, new_password2=confirmation)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context['form'].errors)
+                self.target.refresh_from_db()
+                self.assertTrue(self.target.check_password('Original!4829'))
+
+    def test_own_password_preserves_session(self):
+        self.assertEqual(self.update_user(self.admin, new_password1='Replacement!9274', new_password2='Replacement!9274').status_code, 302)
+        self.assertEqual(self.client.get(reverse('global_user_list')).status_code, 200)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password('Replacement!9274'))
+
+    def test_non_admin_cannot_change_password(self):
+        self.client.force_login(self.target)
+        self.assertEqual(self.update_user(new_password1='Replacement!9274', new_password2='Replacement!9274').status_code, 302)
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.check_password('Original!4829'))
+
+    def test_edit_form_has_password_inputs_without_admin_link(self):
+        response = self.client.get(reverse('global_user_update', args=[self.target.pk]))
+        self.assertContains(response, 'name="new_password1"')
+        self.assertContains(response, 'name="new_password2"')
+        self.assertNotIn('password', response.context['form'].fields)
+
+
+    def test_legacy_password_link_redirects_to_edit_form(self):
+        response = self.client.get(reverse('global_user_password', args=[self.target.pk]))
+        self.assertRedirects(response, reverse('global_user_update', args=[self.target.pk]))
+
+    def test_legacy_password_link_requires_admin(self):
+        self.client.force_login(self.target)
+        response = self.client.get(reverse('global_user_password', args=[self.admin.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login/', response.url)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, TIME_ZONE='America/Guayaquil')
+class SecurityDashboardTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name='Seguridad', slug='seguridad-test')
+        self.user = CustomUser.objects.create_user(
+            username='guard-dashboard', password='Guard!9274',
+            user_type='seguridad_fisica', organization=self.organization,
+        )
+        self.client.force_login(self.user)
+
+    def test_dashboard_renders_without_records(self):
+        response = self.client.get(reverse('dashboard_seguridad'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'gestion_personal/seguridad/dashboard_seguridad.html')
+
+    def test_dashboard_uses_local_day_boundaries(self):
+        from datetime import datetime, timezone as datetime_timezone
+        person = Person.objects.create(
+            first_name='Ana', last_name='Perez', id_number='0102030405',
+            birth_date=date(1990, 1, 1), gender='F', organization=self.organization,
+        )
+        inside = AttendanceRecord.objects.create(person=person, record_type='entrada', recorded_by=self.user)
+        outside = AttendanceRecord.objects.create(person=person, record_type='salida', recorded_by=self.user)
+        AttendanceRecord.objects.filter(pk=inside.pk).update(timestamp=datetime(2026, 9, 23, 5, tzinfo=datetime_timezone.utc))
+        AttendanceRecord.objects.filter(pk=outside.pk).update(timestamp=datetime(2026, 9, 24, 5, tzinfo=datetime_timezone.utc))
+        with patch('django.utils.timezone.now', return_value=datetime(2026, 9, 24, 2, tzinfo=datetime_timezone.utc)):
+            response = self.client.get(reverse('dashboard_seguridad'), {'cedula': person.id_number})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['today'], date(2026, 9, 23))
+        self.assertEqual(list(response.context['registros_personal']), [inside])
+        self.assertEqual(response.context['persona'], person)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class SecurityLookupAccessTests(TestCase):
+    def setUp(self):
+        self.organization = Organization.objects.create(name='Guardias', slug='guardias')
+        self.user = CustomUser.objects.create_user(
+            username='guard-lookups', user_type='seguridad_fisica', organization=self.organization,
+        )
+        self.client.force_login(self.user)
+
+    def test_security_can_open_both_tabs_and_return_to_dashboard(self):
+        for name in ('global_person_lookup', 'global_plate_lookup'):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'href="' + reverse('dashboard_seguridad') + '"')
+            self.assertContains(response, 'href="' + reverse('global_person_lookup') + '"')
+            self.assertContains(response, 'href="' + reverse('global_plate_lookup') + '"')
+
+    @patch('gestion_personal.views.start_person_lookup_process', return_value=True)
+    @patch('gestion_personal.views.start_plate_lookup_process', return_value=True)
+    def test_security_can_submit_queries(self, plate_start, person_start):
+        from .models import PersonLookupRecord
+        self.assertEqual(self.client.post(reverse('global_plate_lookup'), {'placa': 'ABC1234'}).status_code, 302)
+        self.assertEqual(self.client.post(reverse('global_person_lookup'), {'cedula': '0102030405'}).status_code, 302)
+        plate_start.assert_called_once_with('ABC1234', self.user)
+        person_start.assert_called_once_with('0102030405', self.user)
+        self.assertEqual(PlateLookupRecord.objects.get(placa='ABC1234').consultado_por, self.user)
+        self.assertEqual(PersonLookupRecord.objects.get(cedula='0102030405').consultado_por, self.user)
+
+    def test_other_roles_remain_restricted(self):
+        for role in ('rh', 'operador', 'tecnico_seguridad', 'global_admin'):
+            self.user.user_type = role
+            self.user.save()
+            for name in ('global_person_lookup', 'global_plate_lookup'):
+                self.assertEqual(self.client.get(reverse(name)).status_code, 302)
+        self.client.logout()
+        for name in ('global_person_lookup', 'global_plate_lookup'):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 302)
+
+    def test_system_admin_retains_access(self):
+        self.user.user_type = 'global_admin'
+        self.user.organization = None
+        self.user.save()
+        for name in ('global_person_lookup', 'global_plate_lookup'):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 200)

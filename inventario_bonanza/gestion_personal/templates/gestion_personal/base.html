@@ -231,6 +231,9 @@
                         <a href="{% url 'global_person_lookup' %}" class="{% if 'global/consultas-personas' in request.path %}active{% endif %}">
                             <i class="fas fa-id-card me-2"></i>Consulta Personas
                         </a>
+                        <a href="{% url 'telegram_alerts_page' %}" class="{% if '/global/alertas/' in request.path %}active{% endif %}">
+                            <i class="fas fa-bell me-2"></i>Alertas
+                        </a>
                         <a href="{% url 'server_status_page' %}" class="{% if '/server/' in request.path %}active{% endif %}">
                             <i class="fas fa-server me-2"></i>Servidor
                         </a>
@@ -330,6 +333,12 @@
                         </a>
                         <a href="{% url 'visitas_programadas' %}" class="{% if 'visitas-programadas' in request.path %}active{% endif %}">
                             <i class="fas fa-calendar-check me-2"></i>Visitas Programadas
+                        </a>
+                        <a href="{% url 'global_person_lookup' %}" class="{% if 'global/consultas-personas' in request.path %}active{% endif %}">
+                            <i class="fas fa-id-card me-2"></i>Consulta de Personas
+                        </a>
+                        <a href="{% url 'global_plate_lookup' %}" class="{% if 'global/placas' in request.path %}active{% endif %}">
+                            <i class="fas fa-car me-2"></i>Consulta de Placas
                         </a>
                     {% elif user.user_type == 'tecnico_seguridad' %}
                         <a href="{% url 'dashboard_tecnico' %}" class="{% if 'tecnico/dashboard' in request.path %}active{% endif %}">

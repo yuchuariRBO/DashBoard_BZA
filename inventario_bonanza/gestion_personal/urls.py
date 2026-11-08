@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/face-gallery/people/', views.api_face_gallery_people, name='api_face_gallery_people'),
     path('server/', views.server_status_page, name='server_status_page'),
     path('server/api/', views.server_status_api, name='server_status_api'),
+    path('global/alertas/', views.telegram_alerts_page, name='telegram_alerts_page'),
 
     # Panel Administrador Global
     path('global/dashboard/', views.dashboard_global_admin, name='dashboard_global_admin'),
@@ -23,6 +24,7 @@ urlpatterns = [
     path('global/usuarios/', views.GlobalUserListView.as_view(), name='global_user_list'),
     path('global/usuarios/nuevo/', views.GlobalUserCreateView.as_view(), name='global_user_create'),
     path('global/usuarios/<int:pk>/editar/', views.GlobalUserUpdateView.as_view(), name='global_user_update'),
+    path('global/usuarios/<int:pk>/password/', views.global_user_password, name='global_user_password'),
     path('global/personas/', views.PersonListView.as_view(), name='global_person_list'),
     path('global/personas/nueva/', views.PersonCreateView.as_view(), name='global_person_create'),
     path('global/personas/<int:pk>/editar/', views.PersonUpdateView.as_view(), name='global_person_update'),

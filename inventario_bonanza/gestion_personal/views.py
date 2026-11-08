@@ -1,4 +1,9 @@
+from .services.person_identity import stored_identity
+from .services.person_lookup_presentation import person_lookup_presentation
+from .services.scoping import organization_records_for
+import logging
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.urls import reverse_lazy, reverse
@@ -33,17 +38,17 @@ import zipfile
 import mimetypes
 import re
 
-from django.db import connection
+from django.db import connection, transaction
 from .models import (
     AccidentCase, AnnualActivity, AttendanceRecord, CustomUser, DiningAssignmentHistory,
     DiningHall, EPPAssignment, HRInspection, MedicalConsultation, MedicalHistory,
     MedicalLeaveCase, MonthlyWorkDay, Organization, PermisoSalida, Person,
     PersonLookupRecord, PlateLookupRecord, Room, RoomAssignment,
     RoomOccupancyMovement, Sanction, SocialBenefitCase, UpcomingEntry, VacationRecord,
-    VehicleRecord, VisitaProgramada, VisitorRecord,
+    VehicleRecord, VisitaProgramada, VisitorRecord, TelegramAlertSettings,
 )
 from .forms import (
-    BajaPersonaForm, CustomUserChangeForm, CustomUserCreationForm, DiningHallForm,
+    BajaPersonaForm, GlobalUserChangeForm, CustomUserCreationForm, DiningHallForm,
     EPPAssignmentForm, ImportExcelForm, MedicalCheckupForm, MedicalConsultationForm,
     MedicalHistoryForm, OrganizationForm, PermisoSalidaForm, PersonForm,
     PersonLookupForm, PlateLookupForm, RoomAssignmentForm, RoomForm,
@@ -52,7 +57,9 @@ from .forms import (
 )
 from .plate_lookup import normalize_plate, plate_variants
 from .person_lookup import normalize_cedula
-from .services.notifications import send_telegram_message
+from .services.notifications import (
+    format_server_security_alert, send_telegram_message, telegram_configuration,
+)
 from .services.dates import local_date_range_bounds, local_day_bounds
 from .services.scoping import (
     organization_filter_for as _organization_filter_for,
@@ -106,6 +113,10 @@ def is_global_admin(user):
 
 def is_system_global_admin(user):
     return is_global_admin(user) and user.organization_id is None
+
+
+def can_use_external_lookups(user):
+    return is_system_global_admin(user) or is_seguridad_fisica(user)
 
 
 def _bytes_to_human(value):
@@ -545,7 +556,81 @@ def dashboard_global_admin(request):
     return render(request, 'gestion_personal/global_admin/dashboard.html', context)
 
 
-@login_required
+class TelegramAlertsForm(django_forms.Form):
+    bot_token = django_forms.CharField(
+        required=False, max_length=256, label='Token del bot',
+        widget=django_forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+        help_text='Déjalo vacío para conservar el token actual.',
+    )
+    server_chat_ids = django_forms.CharField(
+        required=False, label='IDs para alertas del servidor',
+        widget=django_forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+        help_text='Un ID por línea o separados por comas. Se admiten IDs negativos de grupos.',
+    )
+    common_chat_ids = django_forms.CharField(
+        required=False, label='IDs para alertas comunes',
+        widget=django_forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+        help_text='Un ID por línea o separados por comas.',
+    )
+
+    def clean(self):
+        data = super().clean()
+        for name in ('server_chat_ids', 'common_chat_ids'):
+            value = data.get(name, '')
+            ids = [item.strip() for item in re.split(r'[,\n]+', value) if item.strip()]
+            if any(not re.fullmatch(r'-?\d+', item) for item in ids):
+                self.add_error(name, 'Usa solo IDs numéricos, uno por línea o separados por comas.')
+            else:
+                data[name] = '\n'.join(dict.fromkeys(ids))
+        return data
+
+
+@user_passes_test(is_system_global_admin)
+def telegram_alerts_page(request):
+    config, _ = TelegramAlertSettings.objects.get_or_create(
+        pk=1, defaults={'common_chat_ids': '\n'.join(settings.TELEGRAM_CHAT_IDS)},
+    )
+    if request.method == 'POST' and request.POST.get('action') in ('test_server', 'test_common'):
+        category = 'server' if request.POST['action'] == 'test_server' else 'common'
+        label = 'del servidor' if category == 'server' else 'comunes'
+        token, chat_ids = telegram_configuration(category)
+        if not token or not chat_ids:
+            messages.error(request, f'Configura y guarda el bot y los IDs de alertas {label} antes de probar.')
+        else:
+            if category == 'server':
+                message = format_server_security_alert(
+                    'No aplica (prueba)', timezone.localtime().strftime('%d/%m/%Y %H:%M %Z'),
+                    'Prueba manual desde la pestaña Alertas',
+                )
+            else:
+                message = 'ALERTA COMÚN ROBIOTEC\nPrueba manual desde la pestaña Alertas.'
+            result = send_telegram_message(message, category=category)
+            if result['failed']:
+                messages.error(request, f'Prueba de alertas {label}: {result["sent"]} enviados, {result["failed"]} fallidos. Revisa el bot y los IDs.')
+            else:
+                messages.success(request, f'Prueba de alertas {label} enviada a {result["sent"]} chat(s).')
+        return redirect('telegram_alerts_page')
+    if request.method == 'POST':
+        form = TelegramAlertsForm(request.POST)
+        if form.is_valid():
+            token = form.cleaned_data['bot_token'].strip()
+            if token:
+                config.bot_token = token
+            config.server_chat_ids = form.cleaned_data['server_chat_ids']
+            config.common_chat_ids = form.cleaned_data['common_chat_ids']
+            config.save()
+            messages.success(request, 'Configuración de alertas guardada.')
+            return redirect('telegram_alerts_page')
+    else:
+        form = TelegramAlertsForm(initial={
+            'server_chat_ids': config.server_chat_ids,
+            'common_chat_ids': config.common_chat_ids,
+        })
+    return render(request, 'gestion_personal/global_admin/telegram_alerts.html', {
+        'form': form, 'token_configured': bool(config.bot_token or settings.TELEGRAM_BOT_TOKEN),
+    })
+
+
 @user_passes_test(is_system_global_admin)
 def server_status_api(request):
     return JsonResponse(get_server_status_payload())
@@ -660,13 +745,23 @@ class GlobalUserCreateView(CreateView):
 @method_decorator(user_passes_test(is_system_global_admin), name='dispatch')
 class GlobalUserUpdateView(UpdateView):
     model = CustomUser
-    form_class = CustomUserChangeForm
+    form_class = GlobalUserChangeForm
     template_name = 'gestion_personal/global_admin/user_form.html'
     success_url = reverse_lazy('global_user_list')
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        if self.object.pk == self.request.user.pk:
+            update_session_auth_hash(self.request, self.object)
         messages.success(self.request, 'Usuario actualizado correctamente.')
-        return super().form_valid(form)
+        return response
+
+
+@login_required
+@user_passes_test(is_system_global_admin)
+def global_user_password(request, pk):
+    get_object_or_404(CustomUser, pk=pk)
+    return redirect('global_user_update', pk=pk)
 
 
 @login_required
@@ -1127,8 +1222,9 @@ def api_person_lookup(request, cedula):
 
 
 @login_required
-@user_passes_test(is_system_global_admin)
+@user_passes_test(can_use_external_lookups)
 def global_plate_lookup(request):
+    scoped_records = PlateLookupRecord.objects.all()
     form = PlateLookupForm(request.POST or None)
     record = None
     active_tab = request.GET.get('tab') or 'consultas'
@@ -1151,12 +1247,12 @@ def global_plate_lookup(request):
 
     requested_plate = normalize_plate(request.GET.get('placa', ''))
     if requested_plate:
-        record = PlateLookupRecord.objects.filter(placa=requested_plate).select_related('consultado_por').first()
+        record = scoped_records.filter(placa=requested_plate).select_related('consultado_por').first()
         if record:
             form = PlateLookupForm(initial={'placa': record.placa})
 
     status_choices = PlateLookupRecord.STATUS_CHOICES
-    queue_qs = PlateLookupRecord.objects.select_related('consultado_por').order_by('-updated_at')
+    queue_qs = scoped_records.select_related('consultado_por').order_by('-updated_at')
     queue_status = (request.GET.get('queue_status') or '').strip()
     queue_query = (request.GET.get('queue_q') or '').strip()
     if queue_status:
@@ -1172,7 +1268,7 @@ def global_plate_lookup(request):
         )
     queue_paginator = Paginator(queue_qs, 25)
     queue_page = queue_paginator.get_page(request.GET.get('queue_page'))
-    queue_counts = PlateLookupRecord.objects.aggregate(
+    queue_counts = scoped_records.aggregate(
         pending=Count('id', filter=Q(lookup_status='pending')),
         running=Count('id', filter=Q(lookup_status='running')),
         failed=Count('id', filter=Q(lookup_status='failed')),
@@ -1181,7 +1277,7 @@ def global_plate_lookup(request):
     plate_query = (request.GET.get('q') or '').strip()
     exact_plate = normalize_plate(request.GET.get('db_placa', ''))
     db_status = (request.GET.get('db_status') or '').strip()
-    saved_plates_qs = PlateLookupRecord.objects.select_related('consultado_por').order_by('-updated_at')
+    saved_plates_qs = scoped_records.select_related('consultado_por').order_by('-updated_at')
     if db_status:
         saved_plates_qs = saved_plates_qs.filter(lookup_status=db_status)
     if exact_plate:
@@ -1198,7 +1294,7 @@ def global_plate_lookup(request):
     total_placas_guardadas = saved_plates_qs.count()
     db_paginator = Paginator(saved_plates_qs, 30)
     db_page = db_paginator.get_page(request.GET.get('db_page'))
-    recientes = PlateLookupRecord.objects.select_related('consultado_por').order_by('-updated_at')[:20]
+    recientes = scoped_records.select_related('consultado_por').order_by('-updated_at')[:20]
     return render(request, 'gestion_personal/global_admin/plate_lookup.html', {
         'form': form,
         'record': record,
@@ -1218,8 +1314,9 @@ def global_plate_lookup(request):
 
 
 @login_required
-@user_passes_test(is_system_global_admin)
+@user_passes_test(can_use_external_lookups)
 def global_person_lookup(request):
+    scoped_records = PersonLookupRecord.objects.all()
     form = PersonLookupForm(request.POST or None)
     record = None
     active_tab = request.GET.get('tab') or 'consultas'
@@ -1244,26 +1341,11 @@ def global_person_lookup(request):
 
     requested_cedula = normalize_cedula(request.GET.get('cedula', ''))
     if requested_cedula:
-        record = PersonLookupRecord.objects.filter(cedula=requested_cedula).select_related('consultado_por').first()
+        record = scoped_records.filter(cedula=requested_cedula).select_related('consultado_por').first()
         if record:
             form = PersonLookupForm(initial={'cedula': record.cedula})
-    record_details_json = ""
-    if record:
-        record_details_json = json.dumps({
-            "cedula": record.cedula,
-            "estado": record.lookup_status,
-            "resumen_normalizado": record.normalized_data,
-            "funcion_judicial": record.funcion_judicial_data,
-            "ant": record.ant_data,
-            "sri": record.sri_data,
-            "sri_ruc_natural": record.normalized_data.get("sri_ruc_natural", {}),
-            "ecuadorlegal": record.normalized_data.get("ecuadorlegal", {}),
-            "sanciones": record.normalized_data.get("sanciones", {}),
-            "errores_fuentes": record.source_errors,
-        }, ensure_ascii=False, indent=2, default=str)
-
     status_choices = PersonLookupRecord.STATUS_CHOICES
-    queue_qs = PersonLookupRecord.objects.select_related('consultado_por').order_by('-updated_at')
+    queue_qs = scoped_records.select_related('consultado_por').order_by('-updated_at')
     queue_status = (request.GET.get('queue_status') or '').strip()
     queue_query = (request.GET.get('queue_q') or '').strip()
     if queue_status:
@@ -1279,7 +1361,7 @@ def global_person_lookup(request):
         )
     queue_paginator = Paginator(queue_qs, 25)
     queue_page = queue_paginator.get_page(request.GET.get('queue_page'))
-    queue_counts = PersonLookupRecord.objects.aggregate(
+    queue_counts = scoped_records.aggregate(
         pending=Count('id', filter=Q(lookup_status='pending')),
         running=Count('id', filter=Q(lookup_status='running')),
         failed=Count('id', filter=Q(lookup_status='failed')),
@@ -1288,7 +1370,7 @@ def global_person_lookup(request):
     person_query = (request.GET.get('q') or '').strip()
     exact_cedula = normalize_cedula(request.GET.get('db_cedula', ''))
     db_status = (request.GET.get('db_status') or '').strip()
-    saved_people_qs = PersonLookupRecord.objects.select_related('consultado_por').order_by('-updated_at')
+    saved_people_qs = scoped_records.select_related('consultado_por').order_by('-updated_at')
     if db_status:
         saved_people_qs = saved_people_qs.filter(lookup_status=db_status)
     if exact_cedula:
@@ -1304,7 +1386,8 @@ def global_person_lookup(request):
     return render(request, 'gestion_personal/global_admin/person_lookup.html', {
         'form': form,
         'record': record,
-        'record_details_json': record_details_json,
+        'legal_details': person_lookup_presentation(record),
+        'person_identity': stored_identity(record) if record else {},
         'queue_page': queue_page,
         'queue_query': queue_query,
         'queue_status': queue_status,
@@ -1327,13 +1410,13 @@ def dashboard_operador(request):
      # Añadir visitas programadas para hoy
     today = timezone.localdate()
     day_start, day_end = local_day_bounds(today)
-    visitas_programadas = VisitaProgramada.objects.filter(
+    visitas_programadas = organization_records_for(VisitaProgramada, request.user).filter(
         fecha_programada=today,
         status='pendiente'
     ).order_by('hora_programada')
     
     # Obtener visitantes activos (registrados hoy sin salida)
-    visitantes_activos = VisitorRecord.objects.filter(
+    visitantes_activos = organization_records_for(VisitorRecord, request.user).filter(
         fecha__gte=day_start,
         fecha__lt=day_end,
         fecha_salida__isnull=True
@@ -1464,7 +1547,7 @@ def registros_diarios(request):
         )
     
     # Filtrar registros de visitantes
-    registros_visitantes = VisitorRecord.objects.filter(fecha__gte=day_start, fecha__lt=day_end)
+    registros_visitantes = organization_records_for(VisitorRecord, request.user).filter(fecha__gte=day_start, fecha__lt=day_end)
     if busqueda:
         registros_visitantes = registros_visitantes.filter(
             Q(nombre__icontains=busqueda) | 
@@ -1732,24 +1815,26 @@ def vehicle_create(request):
 @login_required
 @user_passes_test(is_operador)
 @require_POST
+@transaction.atomic
 def visitor_create(request):
     """Registrar nuevo visitante"""
+    if not request.user.organization_id:
+        return HttpResponse(status=403)
+    visita_id = request.POST.get('visita_programada_id')
+    visita = None
+    if visita_id:
+        visita = get_object_or_404(organization_records_for(VisitaProgramada, request.user).select_for_update(), pk=visita_id, status='pendiente')
     form = VisitorRecordForm(request.POST)
     if form.is_valid():
         visitante = form.save(commit=False)
+        visitante.organization_id = request.user.organization_id
         visitante.fecha = timezone.localtime()
         visitante.save()
         
-        # Comprobar si proviene de una visita programada
-        visita_id = request.POST.get('visita_programada_id')
-        if visita_id:
-            try:
-                visita = VisitaProgramada.objects.get(id=visita_id, status='pendiente')
-                visita.status = 'completada'
-                visita.save()
-            except VisitaProgramada.DoesNotExist:
-                pass  # No hacer nada si la visita ya no existe o no está pendiente
-        
+        if visita:
+            visita.status = 'completada'
+            visita.save(update_fields=['status', 'actualizado_en'])
+
         messages.success(request, "Visitante registrado correctamente.")
     else:
         messages.error(request, "Error al registrar visitante.")
@@ -1767,7 +1852,7 @@ def vehicle_exit(request):
     """Registrar salida de vehículo"""
     vehicle_id = request.POST.get("vehicle_id")
     
-    vehicle = get_object_or_404(VehicleRecord, id=vehicle_id)
+    vehicle = get_object_or_404(VehicleRecord.objects.filter(organization_filter_for(request.user)), id=vehicle_id)
     
     # Verificar si ya salió
     if vehicle.fecha_salida:
@@ -2862,7 +2947,8 @@ def import_excel(request):
                 return redirect('person_list')
                 
             except Exception as e:
-                messages.error(request, f'Error al procesar el archivo: {str(e)}')
+                logging.getLogger(__name__).exception('Error al importar archivo')
+                messages.error(request, 'No se pudo procesar el archivo. Revisa su formato e inténtalo nuevamente.')
     else:
         form = ImportExcelForm()
     
@@ -2944,7 +3030,7 @@ def export_attendance(request):
                 ws_visitors.write(0, col_num, column_title, font_style)
             
             # Consultar visitantes
-            visitantes = VisitorRecord.objects.filter(
+            visitantes = organization_records_for(VisitorRecord, request.user).filter(
                 fecha__gte=range_start,
                 fecha__lt=range_end,
             ).order_by('fecha')
@@ -3003,7 +3089,8 @@ def export_attendance(request):
             return response
             
         except Exception as e:
-            messages.error(request, f'Error al generar el reporte: {str(e)}')
+            logging.getLogger(__name__).exception('Error al generar reporte')
+            messages.error(request, 'No se pudo generar el reporte. Inténtalo más tarde.')
             return redirect('export_attendance')
     
     return render(request, 'gestion_personal/rh/export_attendance.html')
@@ -3684,9 +3771,12 @@ def crear_sancion_admin(request):
 @require_POST
 def visitor_create_admin(request):
     """Registrar nuevo visitante desde administrador"""
+    if not request.user.organization_id:
+        return HttpResponse(status=403)
     form = VisitorRecordForm(request.POST)
     if form.is_valid():
         visitante = form.save(commit=False)
+        visitante.organization_id = request.user.organization_id
         visitante.fecha = timezone.localtime()
         visitante.save()
         messages.success(request, "Visitante registrado correctamente.")
@@ -3702,7 +3792,8 @@ def visitor_create_admin(request):
 def dashboard_seguridad(request):
     """Dashboard para personal de seguridad física"""
     # Registros del día de hoy
-    today = timezone.now().date()
+    today = timezone.localdate()
+    day_start, day_end = local_day_bounds(today)
     
     # Registros de personal
     registros_personal = AttendanceRecord.objects.select_related('person', 'recorded_by').filter(
@@ -3710,7 +3801,7 @@ def dashboard_seguridad(request):
     ).filter(person__in=person_queryset_for(request.user)).order_by('-timestamp')[:RECORD_LIST_LIMIT]
     
     # Registros de visitantes
-    registros_visitantes = VisitorRecord.objects.filter(
+    registros_visitantes = organization_records_for(VisitorRecord, request.user).filter(
         fecha__gte=day_start, fecha__lt=day_end,
     ).order_by('-fecha')[:RECORD_LIST_LIMIT]
     
@@ -3791,7 +3882,7 @@ def registros_por_fecha(request):
     ).filter(person__in=person_queryset_for(request.user))
     
     # Registros de visitantes
-    registros_visitantes_qs = VisitorRecord.objects.filter(
+    registros_visitantes_qs = organization_records_for(VisitorRecord, request.user).filter(
         fecha__gte=day_start, fecha__lt=day_end,
     )
     
@@ -3827,9 +3918,12 @@ def registros_por_fecha(request):
 @require_POST
 def visitor_create_seguridad(request):
     """Registrar nuevo visitante desde seguridad"""
+    if not request.user.organization_id:
+        return HttpResponse(status=403)
     form = VisitorRecordForm(request.POST)
     if form.is_valid():
         visitante = form.save(commit=False)
+        visitante.organization_id = request.user.organization_id
         visitante.fecha = timezone.localtime()
         visitante.save()
         messages.success(request, "Visitante registrado correctamente.")
@@ -3849,7 +3943,7 @@ def dashboard_tecnico(request):
     historial_epp = None
     
     # Formulario para asignación de EPP
-    form_epp = EPPAssignmentForm()
+    form_epp = EPPAssignmentForm(asignado_por=request.user)
     
     # Búsqueda por cédula
     cedula = request.GET.get('cedula')
@@ -4593,7 +4687,7 @@ def verificar_estado(request):
     except Exception as e:
         return JsonResponse({
             'status': 'error', 
-            'error': f'Error al verificar estado: {str(e)}'
+            'error': 'No se pudo verificar el estado. Inténtalo más tarde.'
         }, status=500)
     
 @login_required
@@ -4724,24 +4818,25 @@ def marcacion_rapida(request):
             return JsonResponse({"status": "error", "error": "Persona no encontrada con esta cédula"})
         
         except Exception as e:
-            import traceback
+            logging.getLogger(__name__).exception("Error en marcación rápida")
             return JsonResponse({
-                "status": "error", 
-                "error": str(e),
-                "details": traceback.format_exc()
-            })
+                "status": "error",
+                "error": "Servicio no disponible. Inténtalo de nuevo más tarde."
+            }, status=500)
     
     return redirect('dashboard_operador')
 
 @login_required
 @user_passes_test(is_operador)
 @require_POST
+@transaction.atomic
 def completar_visita_programada(request, visita_id):
     """Registrar visitante desde una visita programada"""
-    visita = get_object_or_404(VisitaProgramada, id=visita_id, status='pendiente')
+    visita = get_object_or_404(organization_records_for(VisitaProgramada, request.user).select_for_update(), id=visita_id, status='pendiente')
     
     # Crear registro de visitante
     visitante = VisitorRecord(
+        organization_id=visita.organization_id,
         nombre=visita.nombre,
         cedula=visita.identificacion,
         area_visita=visita.area_visita,
@@ -4768,7 +4863,7 @@ def visitor_exit(request):
         return JsonResponse({"status": "error", "error": "ID de visitante no proporcionado"})
     
     try:
-        visitante = VisitorRecord.objects.get(id=visitante_id, fecha_salida__isnull=True)
+        visitante = organization_records_for(VisitorRecord, request.user).get(id=visitante_id, fecha_salida__isnull=True)
         visitante.fecha_salida = timezone.now()
         visitante.save()
         
@@ -4784,7 +4879,7 @@ def visitor_exit(request):
     except Exception as e:
         return JsonResponse({
             "status": "error",
-            "error": str(e)
+            "error": "No se pudo completar la operación. Inténtalo más tarde."
         })
 
 @login_required
@@ -4837,10 +4932,12 @@ def can_program_visits(user):
 @user_passes_test(can_program_visits)
 def visitas_programadas(request):
     """Vista para listar y crear visitas programadas"""
+    if request.method == 'POST' and not request.user.organization_id and not is_system_global_admin(request.user):
+        return HttpResponse(status=403)
     # Obtener todas las visitas programadas por este usuario
-    visitas = VisitaProgramada.objects.select_related('programado_por').order_by('fecha_programada', 'hora_programada')
+    visitas = organization_records_for(VisitaProgramada, request.user).select_related('programado_por').order_by('fecha_programada', 'hora_programada')
     if request.user.user_type == 'global_admin' and request.user.organization_id:
-        visitas = visitas.filter(programado_por__organization=request.user.organization)
+        visitas = visitas.filter(organization=request.user.organization)
     elif request.user.user_type != 'global_admin':
         visitas = visitas.filter(programado_por=request.user)
     
@@ -4884,9 +4981,9 @@ def visitas_programadas(request):
 @user_passes_test(can_program_visits)
 def editar_visita_programada(request, visita_id):
     """Vista para editar una visita programada"""
-    visita_qs = VisitaProgramada.objects.all()
+    visita_qs = organization_records_for(VisitaProgramada, request.user)
     if request.user.user_type == 'global_admin' and request.user.organization_id:
-        visita_qs = visita_qs.filter(programado_por__organization=request.user.organization)
+        visita_qs = visita_qs.filter(organization=request.user.organization)
     elif request.user.user_type != 'global_admin':
         visita_qs = visita_qs.filter(programado_por=request.user)
     visita = get_object_or_404(visita_qs, id=visita_id)
@@ -4912,9 +5009,9 @@ def editar_visita_programada(request, visita_id):
 @require_POST
 def cancelar_visita_programada(request, visita_id):
     """Vista para cancelar una visita programada"""
-    visita_qs = VisitaProgramada.objects.all()
+    visita_qs = organization_records_for(VisitaProgramada, request.user)
     if request.user.user_type == 'global_admin' and request.user.organization_id:
-        visita_qs = visita_qs.filter(programado_por__organization=request.user.organization)
+        visita_qs = visita_qs.filter(organization=request.user.organization)
     elif request.user.user_type != 'global_admin':
         visita_qs = visita_qs.filter(programado_por=request.user)
     visita = get_object_or_404(visita_qs, id=visita_id)

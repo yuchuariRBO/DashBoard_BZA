@@ -62,13 +62,19 @@
     font-size: .82rem;
     white-space: pre-wrap;
   }
+  .legal-panel { border: 1px solid #dce5ee; border-radius: 12px; scroll-margin-top: 24px; overflow: hidden; }
+  .legal-case { border: 1px solid #dce5ee; border-radius: 8px; overflow-wrap: anywhere; }
+  .legal-case summary { padding: 14px; cursor: pointer; background: #f4f7fb; font-weight: 600; }
+  .legal-case summary:focus-visible { outline: 3px solid #0d6efd; outline-offset: -3px; }
+  #legal-details { scroll-margin-top: 24px; }
+  #supa-results td { min-width: 120px; overflow-wrap: anywhere; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1><i class="fas fa-id-card me-2"></i>Consultas de personas</h1>
-  <a href="{% url 'dashboard_global_admin' %}" class="btn btn-secondary">
+  <a href="{% if user.user_type == 'seguridad_fisica' %}{% url 'dashboard_seguridad' %}{% else %}{% url 'dashboard_global_admin' %}{% endif %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left me-1"></i>Volver
   </a>
 </div>
@@ -109,7 +115,7 @@
 {% if record %}
 <div class="card shadow-sm mb-4">
   <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-    <h5 class="mb-0">{{ record.cedula }}</h5>
+    <div><h5 class="mb-1">{{ person_identity.name|default:"Nombre no confirmado" }}</h5><div class="small">Cédula {{ record.cedula }}{% if person_identity.source %} · {{ person_identity.source }}{% endif %}</div></div>
     <div class="d-flex gap-2 align-items-center">
       {% if record.lookup_status == "completed" %}
         <span class="badge bg-success">Completada</span>
@@ -124,9 +130,7 @@
       {% endif %}
       <span class="badge bg-light text-dark">{{ record.updated_at|date:"d/m/Y H:i" }}</span>
       {% if record.lookup_status != "pending" and record.lookup_status != "running" %}
-      <button class="btn btn-sm btn-outline-light" type="button" data-bs-toggle="modal" data-bs-target="#personLookupDetailModal">
-        <i class="fas fa-window-restore me-1"></i>Detalle
-      </button>
+      <a class="btn btn-sm btn-outline-light" href="#legal-details"><i class="fas fa-list me-1"></i>Ver procesos y SUPA</a>
       {% endif %}
     </div>
   </div>
@@ -140,21 +144,21 @@
     </div>
     {% elif record.lookup_status == "failed" %}
     <div class="alert alert-danger mb-0">
-      {{ record.last_error|default:"La consulta falló. Intente nuevamente." }}
+      La consulta no pudo completarse. Inténtalo nuevamente más tarde.
     </div>
     {% else %}
     <div class="lookup-summary-grid">
       <div class="lookup-summary-item">
         <div class="lookup-muted">Nombre</div>
-        <div class="fw-bold">{{ record.nombre_completo|default:"---" }}</div>
+        <div class="fw-bold">{{ person_identity.name|default:"Nombre no confirmado" }}</div>
       </div>
       <div class="lookup-summary-item">
         <div class="lookup-muted">Actor</div>
-        <div class="lookup-summary-value">{{ record.procesos_actor_total }}</div>
+        <div class="lookup-summary-value">{{ legal_details.judicial_sections.0.total|default_if_none:"No confirmado" }}</div>
       </div>
       <div class="lookup-summary-item">
         <div class="lookup-muted">Demandado</div>
-        <div class="lookup-summary-value">{{ record.procesos_demandado_total }}</div>
+        <div class="lookup-summary-value">{{ legal_details.judicial_sections.1.total|default_if_none:"No confirmado" }}</div>
       </div>
       <div class="lookup-summary-item">
         <div class="lookup-muted">Citaciones ANT</div>
@@ -162,7 +166,7 @@
       </div>
       <div class="lookup-summary-item">
         <div class="lookup-muted">SUPA</div>
-        <div class="lookup-summary-value">{{ record.normalized_data.supa.registros_total|default:0 }}</div>
+        <div class="lookup-summary-value">{{ legal_details.supa_total|default_if_none:"No confirmado" }}</div>
       </div>
       <div class="lookup-summary-item">
         <div class="lookup-muted">OFAC</div>
@@ -198,7 +202,8 @@
         {% endif %}
       {% endif %}
       {% if record.normalized_data.supa %}
-        {% if record.normalized_data.supa.tiene_registros %}
+        {% if legal_details.supa_unavailable %}<span class="badge bg-secondary">SUPA sin confirmar</span>
+        {% elif record.normalized_data.supa.tiene_registros %}
           <span class="badge bg-warning text-dark">SUPA con registros: {{ record.normalized_data.supa.registros_total }}</span>
         {% else %}
           <span class="badge bg-success">SUPA sin registros</span>
@@ -250,11 +255,6 @@
         <span class="badge bg-secondary">{{ label }}: {{ value }}</span>
       {% endfor %}
     </div>
-    {% endif %}
-    {% if record.normalized_data.supa.mensaje %}
-    <hr>
-    <h6>SUPA</h6>
-    <div class="small text-muted">{{ record.normalized_data.supa.mensaje|truncatechars:220 }}</div>
     {% endif %}
     {% if record.normalized_data.sri_ruc_natural.tiene_ruc %}
     <hr>
@@ -347,109 +347,14 @@
     <hr>
     <h6>Fuentes con error</h6>
     {% for source, error in record.source_errors.items %}
-      <span class="badge bg-warning text-dark me-1">{{ source }}: {{ error|truncatechars:90 }}</span>
+      <span class="badge bg-warning text-dark me-1">{{ source }}: respuesta no disponible</span>
     {% endfor %}
     {% endif %}
     {% endif %}
   </div>
 </div>
 {% if record.lookup_status != "pending" and record.lookup_status != "running" %}
-<div class="modal fade" id="personLookupDetailModal" tabindex="-1" aria-labelledby="personLookupDetailModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title" id="personLookupDetailModalLabel">
-          <i class="fas fa-id-card me-2"></i>Detalle de consulta {{ record.cedula }}
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-      </div>
-      <div class="modal-body">
-        <ul class="nav nav-pills mb-3" id="personLookupDetailTabs" role="tablist">
-          <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="summary-tab" data-bs-toggle="pill" data-bs-target="#summary-pane" type="button" role="tab">Resumen</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" id="json-tab" data-bs-toggle="pill" data-bs-target="#json-pane" type="button" role="tab">JSON</button>
-          </li>
-        </ul>
-        <div class="tab-content">
-          <div class="tab-pane fade show active" id="summary-pane" role="tabpanel" tabindex="0">
-            <div class="lookup-summary-grid">
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">Cédula</div>
-                <div class="lookup-code">{{ record.cedula }}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">Nombre</div>
-                <div class="fw-bold">{{ record.nombre_completo|default:"---" }}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">Función Judicial</div>
-                <div>Actor {{ record.procesos_actor_total }} · Demandado {{ record.procesos_demandado_total }}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">SUPA</div>
-                <div>{{ record.normalized_data.supa.registros_total|default:0 }} registro{% if record.normalized_data.supa.registros_total != 1 %}s{% endif %}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">OFAC</div>
-                <div>{{ record.normalized_data.ofac.coincidencias_total|default:0 }} coincidencia{% if record.normalized_data.ofac.coincidencias_total != 1 %}s{% endif %}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">Sanciones</div>
-                <div>{{ record.normalized_data.sanciones.coincidencias_total|default:0 }} coincidencia{% if record.normalized_data.sanciones.coincidencias_total != 1 %}s{% endif %}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">RUC natural</div>
-                <div>{% if record.normalized_data.sri_ruc_natural.tiene_ruc %}{{ record.normalized_data.sri_ruc_natural.ruc }}{% else %}Sin registro{% endif %}</div>
-              </div>
-              <div class="lookup-summary-item">
-                <div class="lookup-muted">ANT</div>
-                <div>{{ record.citaciones_total }} citación{% if record.citaciones_total != 1 %}es{% endif %}</div>
-              </div>
-            </div>
-            {% if record.normalized_data.sri_ruc_natural.tiene_ruc %}
-            <hr>
-            <h6>SRI RUC natural</h6>
-            <div class="row g-3">
-              <div class="col-md-4"><strong>Razón social:</strong><br>{{ record.normalized_data.sri_ruc_natural.razon_social|default:"---" }}</div>
-              <div class="col-md-4"><strong>Estado:</strong><br>{{ record.normalized_data.sri_ruc_natural.estado|default:"---" }}</div>
-              <div class="col-md-4"><strong>Régimen:</strong><br>{{ record.normalized_data.sri_ruc_natural.regimen|default:"---" }}</div>
-              <div class="col-12"><strong>Actividad:</strong><br>{{ record.normalized_data.sri_ruc_natural.actividad_economica|default:"---" }}</div>
-            </div>
-            {% endif %}
-            {% if record.normalized_data.ecuadorlegal.resultados or record.normalized_data.sanciones.coincidencias %}
-            <hr>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <h6>EcuadorLegalOnline</h6>
-                <div class="lookup-muted">
-                  {{ record.normalized_data.ecuadorlegal.resultados_total|default:0 }} resultado{% if record.normalized_data.ecuadorlegal.resultados_total != 1 %}s{% endif %}
-                  {% if record.normalized_data.ecuadorlegal.fecha_defuncion %}
-                    · defunción {{ record.normalized_data.ecuadorlegal.fecha_defuncion }}
-                  {% endif %}
-                </div>
-              </div>
-              <div class="col-md-6">
-                <h6>Sanciones</h6>
-                <div class="lookup-muted">
-                  {{ record.normalized_data.sanciones.coincidencias_total|default:0 }} coincidencia{% if record.normalized_data.sanciones.coincidencias_total != 1 %}s{% endif %} en API unificada.
-                </div>
-              </div>
-            </div>
-            {% endif %}
-          </div>
-          <div class="tab-pane fade" id="json-pane" role="tabpanel" tabindex="0">
-            <pre class="lookup-detail-json mb-0">{{ record_details_json }}</pre>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "gestion_personal/global_admin/person_legal_details.html" %}
 {% endif %}
 {% endif %}
 
@@ -525,7 +430,7 @@
                 <span class="badge bg-secondary">{{ item.get_lookup_status_display }}</span>
               {% endif %}
             </td>
-            <td class="small">{{ item.last_error|default:"---"|truncatechars:100 }}</td>
+            <td class="small">{% if item.last_error %}La fuente no completó la consulta.{% else %}—{% endif %}</td>
             <td>{{ item.requested_at|date:"d/m/Y H:i"|default:"---" }}</td>
             <td>{{ item.updated_at|date:"d/m/Y H:i" }}</td>
             <td class="text-end">

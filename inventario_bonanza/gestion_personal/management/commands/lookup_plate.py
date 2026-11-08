@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 import signal
 
@@ -21,6 +21,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("placa")
         parser.add_argument("--user-id", type=int, default=None)
+        parser.add_argument("--record-id", type=int, default=None)
         parser.add_argument("--timeout-seconds", type=int, default=120)
 
     def handle(self, *args, **options):
@@ -37,10 +38,19 @@ class Command(BaseCommand):
         }
         if user is not None:
             defaults["consultado_por"] = user
-        record, _ = PlateLookupRecord.objects.update_or_create(
-            placa=placa,
-            defaults=defaults,
-        )
+        if options.get('record_id'):
+            record = PlateLookupRecord.objects.filter(pk=options['record_id'], placa=placa).first()
+            if record is None:
+                raise CommandError('El registro solicitado no existe.')
+            for field, value in defaults.items():
+                setattr(record, field, value)
+            record.save(update_fields=[*defaults, 'updated_at'])
+        else:
+            if options.get('user_id') and user is None:
+                raise CommandError('El solicitante no existe.')
+            record, _ = PlateLookupRecord.objects.update_or_create(
+                placa=placa, defaults=defaults,
+            )
 
         previous_handler = signal.getsignal(signal.SIGALRM)
         timeout_seconds = max(30, min(int(options["timeout_seconds"] or 120), 120))
@@ -50,7 +60,7 @@ class Command(BaseCommand):
             result = consultar_placa_completa(placa)
             signal.alarm(0)
             signal.signal(signal.SIGALRM, previous_handler)
-            record = save_plate_lookup_result(result, user=user)
+            record = save_plate_lookup_result(result, user=user, record=record)
             self.stdout.write(self.style.SUCCESS(f"Consulta finalizada: {record.placa} ({record.lookup_status})"))
         except PlateLookupTimeout as exc:
             PlateLookupRecord.objects.filter(pk=record.pk).update(

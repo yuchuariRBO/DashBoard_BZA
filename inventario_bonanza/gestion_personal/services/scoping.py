@@ -21,3 +21,13 @@ def people_for_user(user):
 
 def person_by_id_number_for_user(user, id_number):
     return people_for_user(user).filter(id_number=id_number).first()
+
+
+def organization_records_for(model, user):
+    """Unassigned records are visible only to the system administrator."""
+    queryset = model.objects.all()
+    if user.is_authenticated and user.user_type == 'global_admin' and user.organization_id is None:
+        return queryset
+    if user.is_authenticated and user.organization_id:
+        return queryset.filter(organization_id=user.organization_id)
+    return queryset.none()

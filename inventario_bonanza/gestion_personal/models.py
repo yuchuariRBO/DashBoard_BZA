@@ -530,9 +530,10 @@ class VehicleRecord(models.Model):
                 message += f"- {pasajero.person.first_name} {pasajero.person.last_name}\n"
         
         security = CustomUser.objects.filter(
-            user_type='seguridad_fisica'
-        ).values_list('email', flat=True)
-        send_email_notification(subject, message, ['sbarahona@grupominerobonanza.com', *security])
+            user_type='seguridad_fisica', organization_id=self.organization_id, is_active=True
+        ).exclude(email='').values_list('email', flat=True) if self.organization_id else []
+        if security:
+            send_email_notification(subject, message, list(security))
     
     class Meta:
         verbose_name = "Registro de Vehículo"
@@ -696,6 +697,7 @@ class Sanction(models.Model):
 
 # Añadir fecha_salida a VisitorRecord en models.py
 class VisitorRecord(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, null=True, blank=True)
     nombre = models.CharField(max_length=100)
     cedula = models.CharField(max_length=20)
     area_visita = models.CharField(max_length=100)
@@ -729,9 +731,10 @@ class VisitorRecord(models.Model):
         """
         
         security = CustomUser.objects.filter(
-            user_type='seguridad_fisica'
-        ).values_list('email', flat=True)
-        send_email_notification(subject, message, ['sbarahona@grupominerobonanza.com', *security])
+            user_type='seguridad_fisica', organization_id=self.organization_id, is_active=True
+        ).exclude(email='').values_list('email', flat=True) if self.organization_id else []
+        if security:
+            send_email_notification(subject, message, list(security))
 
     class Meta:
         indexes = [
@@ -740,6 +743,7 @@ class VisitorRecord(models.Model):
         ]
 
 class VisitaProgramada(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, null=True, blank=True)
     STATUS_CHOICES = (
         ('pendiente', 'Pendiente'),
         ('completada', 'Completada'),
@@ -978,3 +982,12 @@ class HRAuditLog(models.Model):
     class Meta:
         ordering = ['-created_at']
         indexes = [models.Index(fields=['organization', 'module', 'created_at'], name='hraudit_org_module_idx')]
+
+
+class TelegramAlertSettings(models.Model):
+    """Configuración única de destinatarios y bot de Telegram."""
+
+    bot_token = models.CharField(max_length=256, blank=True)
+    common_chat_ids = models.TextField(blank=True)
+    server_chat_ids = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

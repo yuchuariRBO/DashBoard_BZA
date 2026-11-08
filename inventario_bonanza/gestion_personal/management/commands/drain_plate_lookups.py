@@ -43,14 +43,15 @@ class Command(BaseCommand):
                         Q(lookup_status="running", updated_at__lt=cutoff)
                     )
                     .order_by("requested_at", "created_at")
-                    .values("placa", "lookup_status")
+                    .values("pk", "placa", "lookup_status")
                     .first()
                 )
                 if not record:
                     break
                 placa = record["placa"]
+                record_id = record["pk"]
                 if record["lookup_status"] == "running":
-                    PlateLookupRecord.objects.filter(placa=placa).update(
+                    PlateLookupRecord.objects.filter(pk=record_id).update(
                         lookup_status="pending",
                         started_at=None,
                         last_error="Consulta huérfana recuperada automáticamente.",
@@ -61,6 +62,8 @@ class Command(BaseCommand):
                     str(manage_py),
                     "lookup_plate",
                     placa,
+                    "--record-id",
+                    str(record_id),
                     "--timeout-seconds",
                     str(timeout_seconds),
                 ]
@@ -76,14 +79,14 @@ class Command(BaseCommand):
                     processed += 1
                 except subprocess.TimeoutExpired:
                     timed_out += 1
-                    PlateLookupRecord.objects.filter(placa=placa).update(
+                    PlateLookupRecord.objects.filter(pk=record_id).update(
                         lookup_status="failed",
                         last_error=f"Timeout luego de {timeout_seconds} segundos",
                         completed_at=timezone.now(),
                     )
                 except subprocess.SubprocessError as exc:
                     failed += 1
-                    PlateLookupRecord.objects.filter(placa=placa).update(
+                    PlateLookupRecord.objects.filter(pk=record_id).update(
                         lookup_status="failed",
                         last_error=str(exc),
                         completed_at=timezone.now(),

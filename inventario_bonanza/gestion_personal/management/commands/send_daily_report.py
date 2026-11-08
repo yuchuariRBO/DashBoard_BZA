@@ -9,13 +9,20 @@ from django.db.models import Q
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 
-from gestion_personal.models import AttendanceRecord, VisitorRecord, VehicleRecord
+from gestion_personal.models import AttendanceRecord, VisitorRecord, VehicleRecord, CustomUser
 from gestion_personal.services.dates import local_day_bounds
 
 class Command(BaseCommand):
     help = 'Envía reporte diario de ingresos y salidas por correo electrónico'
 
     def handle(self, *args, **options):
+        # This consolidated report is reserved for system administrators.
+        recipients = list(CustomUser.objects.filter(
+            user_type='global_admin', organization__isnull=True, is_active=True,
+        ).exclude(email='').values_list('email', flat=True).distinct())
+        if not recipients:
+            self.stdout.write('No hay administradores del sistema con correo configurado; no se envía el reporte.')
+            return
         # Obtener la fecha de ayer
         yesterday = timezone.localdate() - timedelta(days=1)
         day_start, day_end = local_day_bounds(yesterday)
@@ -176,7 +183,7 @@ class Command(BaseCommand):
             subject=f'Reporte diario de ingresos y salidas - {fecha_str}',
             body=message,
             from_email='registrodatos@grupominerobonanza.com',
-            to=['sbarahona@grupominerobonanza.com'],
+            to=recipients,
         )
         
         # Adjuntar Excel
@@ -186,6 +193,6 @@ class Command(BaseCommand):
         # Enviar correo
         try:
             email.send()
-            self.stdout.write(self.style.SUCCESS(f'Reporte diario enviado correctamente a sbarahona@grupominerobonanza.com'))
+            self.stdout.write(self.style.SUCCESS('Reporte diario enviado a administradores del sistema'))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'Error al enviar correo: {str(e)}'))

@@ -4,6 +4,7 @@ from pathlib import Path
 from django.utils import timezone
 
 from .models import PersonLookupRecord
+from .services.person_identity import clean_name, judicial_name, stored_identity
 from .services.lookup_sources import call_source, load_source_module
 
 
@@ -99,7 +100,7 @@ def consultar_persona_completa(cedula):
     normalized = {
         "cedula": cedula,
         "cedula_valida": datacil.get("cedula_valida"),
-        "nombre_completo": nombre_completo,
+        "nombre_completo": clean_name(nombre_completo) or judicial_name(fj, cedula),
         "procesos_actor_total": int(fj.get("procesos_actor_total") or 0),
         "procesos_demandado_total": int(fj.get("procesos_demandado_total") or 0),
         "citaciones_total": int(ant.get("citaciones_total") or 0),
@@ -163,10 +164,20 @@ def consultar_persona_completa(cedula):
     }
 
 
-def save_person_lookup_result(result, user=None):
+def save_person_lookup_result(result, user=None, record=None):
     normalized = result.get("normalized") or {}
     sources = result.get("sources") or {}
     errors = result.get("errors") or {}
+    identity_record = PersonLookupRecord(
+        cedula=result.get('cedula', ''), nombre_completo=normalized.get('nombre_completo') or '',
+        normalized_data=normalized, funcion_judicial_data=sources.get('funcion_judicial') or {},
+        sri_data=sources.get('sri') or {}, ant_data=sources.get('ant') or {},
+    )
+    resolved = stored_identity(identity_record)
+    if resolved['name']:
+        normalized = dict(normalized, nombre_completo=resolved['name'])
+    elif record is not None and clean_name(record.nombre_completo):
+        normalized = dict(normalized, nombre_completo=record.nombre_completo)
     defaults = {
         field: normalized.get(field)
         for field in PERSON_LOOKUP_FIELDS
@@ -183,6 +194,11 @@ def save_person_lookup_result(result, user=None):
     })
     if user is not None:
         defaults["consultado_por"] = user
+    if record is not None:
+        for field, value in defaults.items():
+            setattr(record, field, value)
+        record.save(update_fields=[*defaults, 'updated_at'])
+        return record
     record, _ = PersonLookupRecord.objects.update_or_create(
         cedula=result.get("cedula"),
         defaults=defaults,

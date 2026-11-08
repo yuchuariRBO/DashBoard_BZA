@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
+from django.contrib.auth import password_validation
 from django.core.files.base import ContentFile
 from django.core.validators import FileExtensionValidator
 from django.core.exceptions import ValidationError
@@ -30,6 +31,46 @@ class CustomUserChangeForm(UserChangeForm):
     class Meta:
         model = CustomUser
         fields = ('username', 'email', 'user_type', 'organization', 'first_name', 'last_name', 'is_active')
+
+
+class GlobalUserChangeForm(CustomUserChangeForm):
+    password = None
+    new_password1 = forms.CharField(
+        label='Nueva contraseña', required=False, strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+        help_text='Déjala vacía para conservar la contraseña actual. ' + password_validation.password_validators_help_text_html(),
+    )
+    new_password2 = forms.CharField(
+        label='Confirmar nueva contraseña', required=False, strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+    )
+
+    def clean(self):
+        data = super().clean()
+        password = data.get('new_password1')
+        confirmation = data.get('new_password2')
+        if password or confirmation:
+            if password != confirmation:
+                self.add_error('new_password2', 'Las contraseñas no coinciden.')
+        return data
+
+    def _post_clean(self):
+        super()._post_clean()
+        password = self.cleaned_data.get('new_password1')
+        if password:
+            try:
+                password_validation.validate_password(password, self.instance)
+            except ValidationError as error:
+                self.add_error('new_password1', error)
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if self.cleaned_data.get('new_password1'):
+            user.set_password(self.cleaned_data['new_password1'])
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
 
 
 class OrganizationForm(forms.ModelForm):
@@ -490,6 +531,8 @@ class EPPAssignmentForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.asignado_por = kwargs.pop('asignado_por', None)
         super().__init__(*args, **kwargs)
+        from .services.scoping import people_for_user
+        self.fields['person'].queryset = people_for_user(self.asignado_por) if self.asignado_por else Person.objects.none()
     
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -575,8 +618,9 @@ class VisitaProgramadaForm(forms.ModelForm):
     
     def save(self, commit=True):
         instance = super().save(commit=False)
-        if self.programado_por:
+        if self.programado_por and not instance.pk:
             instance.programado_por = self.programado_por
+            instance.organization_id = self.programado_por.organization_id
         
         if commit:
             instance.save()

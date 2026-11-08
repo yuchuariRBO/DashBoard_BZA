@@ -178,11 +178,11 @@ def consultar_placa_completa(plate):
     }
 
 
-def save_plate_lookup_result(result, user=None):
+def save_plate_lookup_result(result, user=None, record=None):
     normalized = result.get('normalized') or {}
     sources = result.get('sources') or {}
     errors = result.get('errors') or {}
-    existing = PlateLookupRecord.objects.filter(placa=result.get('placa')).first()
+    existing = record or PlateLookupRecord.objects.filter(placa=result.get('placa')).first()
     defaults = {
         field: (
             normalized.get(field)
@@ -206,6 +206,11 @@ def save_plate_lookup_result(result, user=None):
     })
     if user is not None:
         defaults['consultado_por'] = user
+    if record is not None:
+        for field, value in defaults.items():
+            setattr(record, field, value)
+        record.save(update_fields=[*defaults, 'updated_at'])
+        return record
     record, _ = PlateLookupRecord.objects.update_or_create(
         placa=result.get('placa'),
         defaults=defaults,

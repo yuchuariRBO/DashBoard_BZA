@@ -1,0 +1,71 @@
+{% extends "gestion_personal/base.html" %}
+{% block title %}Alertas{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="mb-1"><i class="fas fa-bell me-2"></i>Alertas</h1>
+    <p class="text-muted mb-0">Configura el bot de Telegram y los destinatarios de cada tipo de aviso.</p>
+  </div>
+</div>
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          <h2 class="h5">Bot de Telegram</h2>
+          <p class="text-muted small">Estado: {% if token_configured %}token configurado{% else %}sin token{% endif %}. El token guardado nunca se muestra en pantalla.</p>
+          <div class="mb-4">
+            <label for="{{ form.bot_token.id_for_label }}" class="form-label">{{ form.bot_token.label }}</label>
+            {{ form.bot_token }}
+            <div class="form-text">{{ form.bot_token.help_text }}</div>
+            {% for error in form.bot_token.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+          <h2 class="h5">Alertas de seguridad del servidor</h2>
+          <div class="mb-4">
+            <label for="{{ form.server_chat_ids.id_for_label }}" class="form-label">{{ form.server_chat_ids.label }}</label>
+            {{ form.server_chat_ids }}
+            <div class="form-text">{{ form.server_chat_ids.help_text }}</div>
+            {% for error in form.server_chat_ids.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+          <h2 class="h5">Alertas comunes</h2>
+          <div class="mb-4">
+            <label for="{{ form.common_chat_ids.id_for_label }}" class="form-label">{{ form.common_chat_ids.label }}</label>
+            {{ form.common_chat_ids }}
+            <div class="form-text">{{ form.common_chat_ids.help_text }}</div>
+            {% for error in form.common_chat_ids.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary">Guardar configuración</button>
+        </form>
+        <hr class="my-4">
+        <h2 class="h5">Probar envío</h2>
+        <p class="text-muted small">Las pruebas usan el bot y los IDs guardados. Guarda cualquier cambio antes de probar.</p>
+        <div class="d-flex flex-wrap gap-2">
+          <form method="post">
+            {% csrf_token %}
+            <button type="submit" name="action" value="test_server" class="btn btn-outline-danger">Probar alerta del servidor</button>
+          </form>
+          <form method="post">
+            {% csrf_token %}
+            <button type="submit" name="action" value="test_common" class="btn btn-outline-primary">Probar alerta común</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">Aviso de seguridad</h2>
+        <p class="text-muted small">Formato previsto para bloqueos de Fail2ban.</p>
+        <pre class="bg-light border rounded p-3 mb-0" style="white-space:pre-wrap">ALERTAS DE SEGURIDAD ROBIOTEC
+Servidor: BZA
+Servicio: SSH
+IP Bloqueada: 192.0.2.1
+Fecha: 18/09/2026 12:00 UTC
+Motivo: Bloqueo de Fail2ban</pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

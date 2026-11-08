@@ -222,3 +222,9 @@ LOGGING = {
         },
     },
 }
+
+# Public error pages must never include diagnostic details.
+CSRF_FAILURE_VIEW = 'gestion_personal.error_views.csrf_failure'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True

@@ -37,20 +37,22 @@ class Command(BaseCommand):
                     Q(lookup_status="running", updated_at__lt=cutoff)
                 )
                 .order_by("updated_at")
-                .values_list("cedula", flat=True)[: max(1, options["limit"])]
+                .values_list("pk", "cedula")[: max(1, options["limit"])]
             )
 
             processed = 0
             timed_out = 0
             failed = 0
             manage_py = settings.BASE_DIR / "manage.py"
-            for cedula in records:
+            for record_id, cedula in records:
                 timeout_seconds = max(30, min(int(options["timeout_seconds"] or 120), 120))
                 command = [
                     sys.executable,
                     str(manage_py),
                     "lookup_person",
                     cedula,
+                    "--record-id",
+                    str(record_id),
                     "--timeout-seconds",
                     str(timeout_seconds),
                 ]
@@ -66,14 +68,14 @@ class Command(BaseCommand):
                     processed += 1
                 except subprocess.TimeoutExpired:
                     timed_out += 1
-                    PersonLookupRecord.objects.filter(cedula=cedula).update(
+                    PersonLookupRecord.objects.filter(pk=record_id).update(
                         lookup_status="failed",
                         last_error=f"Timeout luego de {timeout_seconds} segundos",
                         completed_at=timezone.now(),
                     )
                 except subprocess.SubprocessError as exc:
                     failed += 1
-                    PersonLookupRecord.objects.filter(cedula=cedula).update(
+                    PersonLookupRecord.objects.filter(pk=record_id).update(
                         lookup_status="failed",
                         last_error=str(exc),
                         completed_at=timezone.now(),

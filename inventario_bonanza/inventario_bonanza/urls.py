@@ -13,3 +13,8 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+handler400 = 'gestion_personal.error_views.bad_request'
+handler403 = 'gestion_personal.error_views.forbidden'
+handler404 = 'gestion_personal.error_views.not_found'
+handler500 = 'gestion_personal.error_views.server_error'
