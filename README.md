@@ -1,355 +1,508 @@
 # DashboardBZA
 
-Dashboard Django para gestion de personal, accesos, visitantes, vehiculos y consultas internas.
+Plataforma Django para gestionar personal, organizaciones, accesos, visitantes, vehículos, consultas externas y procesos de Recursos Humanos de Bonanza.
 
-## Estado actual
+Este documento describe el código y la operación de la VM verificados el **8 de noviembre de 2026**. Las rutas absolutas corresponden a esa instalación; deben adaptarse al desplegar en otro servidor.
 
-- Aplicacion desplegada en la VM de Vultr en `https://bonanza.robio-ai.com`
-- `nginx` funcionando como reverse proxy
-- `gunicorn` sirviendo Django en `127.0.0.1:8000`
-- SSL emitido con `certbot`
-- Logo activo en la barra superior, favicon y pantalla de login
-- Endpoint de placas disponible
-- Endpoint de personas disponible
+| Recurso | Ubicación |
+|---|---|
+| Aplicación | https://bonanza.robio-ai.com |
+| Repositorio principal, `origin` | [yuchuariRBO/DashBoard_BZA](https://github.com/yuchuariRBO/DashBoard_BZA) |
+| Repositorio anterior, `upstream` | [Robiotec/DashBoard_BZA](https://github.com/Robiotec/DashBoard_BZA) |
+| Rama de despliegue | `main` |
+| Proyecto en la VM | `/root/bonanza` |
+| Arquitectura y reorganización | [docs/architecture.md](docs/architecture.md) |
 
-## Estructura
+## Índice
 
-- `inventario_bonanza/manage.py`: entrada de comandos de Django
-- `inventario_bonanza/inventario_bonanza/`: configuracion principal del proyecto
-- `inventario_bonanza/gestion_personal/`: app principal
-- `inventario_bonanza/gestion_personal/services/`: reglas reutilizables de dominio, métricas, alcance, fechas y notificaciones
-- `inventario_bonanza/static/`: estaticos fuente versionables
-- `inventario_bonanza/media/`: archivos subidos localmente
-- `inventario_bonanza/staticfiles/`: salida local de `collectstatic`, no versionada
-- `integrations/people/`: fuentes de consulta para personas
-- `integrations/plates/`: fuentes de consulta para placas
-- `deploy/`: configuracion de Nginx, systemd, rotación de logs, SSH y Fail2ban
-- `docs/`: arquitectura, auditorías y guías de operación
-- `logs/`: registros separados por tipo, excluidos de Git
-- `run/`: bloqueos temporales de procesos, excluidos de Git
-- `inventario_bonanza/gestion_personal/tests/`: pruebas de regresión
+- [Funciones y perfiles](#funciones-y-perfiles)
+- [Arquitectura](#arquitectura)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Datos y archivos persistentes](#datos-y-archivos-persistentes)
+- [Requisitos e instalación local](#requisitos-e-instalación-local)
+- [Variables de entorno](#variables-de-entorno)
+- [Servicios de producción](#servicios-de-producción)
+- [Actualizar un despliegue existente](#actualizar-un-despliegue-existente)
+- [Logs y rotación](#logs-y-rotación)
+- [Consultas externas y procesamiento](#consultas-externas-y-procesamiento)
+- [Rutas web y APIs](#rutas-web-y-apis)
+- [Respaldos y recuperación](#respaldos-y-recuperación)
+- [Pruebas y validación](#pruebas-y-validación)
+- [Diagnóstico de problemas](#diagnóstico-de-problemas)
+- [Mantenimiento y seguridad](#mantenimiento-y-seguridad)
+- [Documentación complementaria](#documentación-complementaria)
 
-Consulta [la estructura y operación del proyecto](docs/architecture.md).
+## Funciones y perfiles
 
-## Diseño del código
+La plataforma incluye fichas de personal con fotografías, gestión de organizaciones y usuarios, ingresos y salidas, visitantes y visitas programadas, vehículos, permisos, vacaciones, jornadas, sanciones, atención médica, asignación de EPP, alojamiento, comedores, importaciones y exportaciones. Los módulos de RRHH también contemplan actividades, novedades y documentos de respaldo.
 
-Las vistas conservan la capa HTTP: autorización, parámetros, respuestas y plantillas.
-La lógica que se reutiliza está separada en `gestion_personal/services/`:
+| Perfil del modelo | Área principal |
+|---|---|
+| `global_admin` | Administración global o administración limitada a su organización, según la asignación del usuario |
+| `rh` | Personal, jornadas, vacaciones y procesos de Recursos Humanos |
+| `operador` | Registro operativo de ingresos, salidas, vehículos y visitantes |
+| `medico` | Atención y revisión médica |
+| `admin_mina`, `admin_molino` | Administración de su ámbito y visitas programadas |
+| `seguridad_fisica` | Control de accesos y registros de seguridad |
+| `tecnico_seguridad` | Gestión de seguridad y asignación de EPP |
 
-- `scoping.py`: acceso a datos por organización.
-- `dates.py`: rangos indexables para filtros diarios sobre campos de fecha y hora.
-- `notifications.py`: entrega de alertas de Telegram.
-- `lookup_sources.py`: carga segura de conectores de consultas externas.
-- `hr_analytics.py`: métricas agregadas del tablero integral de RRHH.
+Los permisos concretos se aplican en las vistas, formularios y servicios de alcance. Un administrador global sin organización representa al administrador del sistema. La información operativa de las organizaciones tiene filtros de acceso; las **consultas guardadas de personas y placas forman una base compartida entre usuarios autorizados**, conforme a la política actual. No debe asumirse que esas consultas están aisladas por empresa.
 
-Los directorios locales con credenciales, datos operativos, cachés, registros,
-archivos generados y el entorno virtual se excluyen mediante `.gitignore`.
+## Arquitectura
 
-## Flujo de despliegue
-
-En la VM actual el proyecto vive en:
-
-```bash
-/root/bonanza
+```text
+Navegador / integración autorizada
+              │ HTTPS
+              ▼
+            Nginx ───────────────► staticfiles/ (CSS, JS e imágenes del sitio)
+              │ HTTP interno
+              ▼
+      Gunicorn 127.0.0.1:8000
+              │
+          Django / permisos
+         ┌────┼───────────────┐
+         ▼    ▼               ▼
+      SQLite MinIO       Comandos de consulta
+               │               │
+     Fotografías/documentos    ▼
+                        integrations/ → fuentes externas
 ```
 
-Servicios del sistema:
+Las vistas implementan la capa HTTP y la autorización. `gestion_personal/services/` contiene reglas reutilizables de dominio, métricas, notificaciones y filtros. Los comandos de Django ejecutan trabajos de consulta con control de concurrencia. Los conectores externos se cargan desde `integrations/` y sus resultados se guardan en SQLite.
 
-- `bonanza-gunicorn.service`
-- `nginx.service`
-- `minio.service`
-- `ssh.service`
-- `fail2ban.service`
+Los archivos privados se entregan a través de Django con comprobaciones de acceso. Nginx sirve los archivos estáticos recopilados y termina HTTPS. MinIO escucha en interfaces locales; su volumen en disco contiene los objetos y metadatos internos.
 
-Ruta de la configuracion de sitio:
+## Estructura del proyecto
 
-- `/etc/nginx/sites-available/bonanza`
-- `/etc/nginx/sites-available/bonanza-minio-s3`
+```text
+bonanza/
+├── inventario_bonanza/
+│   ├── manage.py                         # Comandos de Django
+│   ├── inventario_bonanza/
+│   │   ├── settings.py                   # Configuración y lectura de .env
+│   │   ├── logging_config.py             # Separación de logs por categoría
+│   │   ├── urls.py                       # Rutas principales
+│   │   ├── wsgi.py                       # Entrada para Gunicorn
+│   │   └── asgi.py
+│   ├── gestion_personal/
+│   │   ├── models.py                     # Datos del dominio
+│   │   ├── forms.py                      # Validación de formularios
+│   │   ├── views.py / urls.py             # HTTP y navegación
+│   │   ├── hr_management.py              # Módulos de RRHH
+│   │   ├── person_lookup.py              # Coordinación de consultas de personas
+│   │   ├── plate_lookup.py               # Coordinación de consultas de placas
+│   │   ├── storage_backends.py           # Acceso de Django a MinIO
+│   │   ├── services/                     # Lógica reutilizable
+│   │   ├── management/commands/          # Jobs y herramientas de operación
+│   │   ├── migrations/                   # Historial del esquema
+│   │   ├── templates/                    # HTML organizado por módulo y perfil
+│   │   └── tests/                        # Pruebas de regresión
+│   ├── static/                           # Activos fuente versionados
+│   ├── staticfiles/                      # Resultado de collectstatic; local
+│   ├── media/                            # Compatibilidad con archivos locales
+│   ├── db.sqlite3                        # Base de datos activa; local
+│   └── service_unavailable.html          # Página estática de indisponibilidad
+├── integrations/
+│   ├── people/                           # Conectores de personas
+│   └── plates/                           # Conectores de placas
+├── deploy/
+│   ├── systemd/                          # Unidades, timer y drop-ins
+│   ├── nginx/                            # Sitios y configuración de errores
+│   ├── logrotate/bonanza                 # Retención de logs
+│   ├── security/                         # SSH y Fail2ban
+│   └── scripts/                          # Herramientas de instalación manual
+├── docs/
+│   ├── architecture.md
+│   ├── audits/
+│   └── operations/
+├── logs/                                 # Logs operativos; no versionados
+├── run/                                  # Bloqueos de procesos; no versionados
+├── MinIO/                                # Volumen persistente; no versionado
+├── venv/                                 # Entorno Python activo; no versionado
+├── .env                                  # Secretos de la instalación; no versionado
+├── .env.example                          # Ejemplo de configuración
+├── .gitignore
+└── requirements.txt
+```
 
-Certificado SSL:
+Los directorios `consulta_people/` y `consulta_plates/` se consolidaron en `integrations/`. La documentación y los scripts que estaban dentro de `inventario_bonanza/deploy/` pasaron a `docs/` y `deploy/`. Los antiguos archivos `test_*.py` y `tests.py` se agruparon en `gestion_personal/tests/`.
 
-- `/etc/letsencrypt/live/bonanza.robio-ai.com/`
+### Servicios de dominio
 
-## Configuracion local
+| Archivo en `gestion_personal/services/` | Responsabilidad |
+|---|---|
+| `scoping.py`, `roles.py` | Alcance por organización y navegación por perfil |
+| `hr_dashboard.py`, `hr_analytics.py` | Indicadores y contexto de tableros |
+| `people_import.py`, `person_search.py`, `detailed_people.py` | Importación y búsqueda de personal |
+| `person_identity.py`, `person_lookup_presentation.py` | Identidad y presentación de resultados guardados |
+| `lookup_sources.py` | Carga y ejecución controlada de conectores |
+| `notifications.py` | Notificaciones por correo y Telegram |
+| `dates.py`, `workdays.py`, `record_metrics.py` | Fechas, jornadas y métricas de registros |
+
+## Datos y archivos persistentes
+
+| Contenido | Ubicación actual | Observación |
+|---|---|---|
+| Datos del personal y consultas | `inventario_bonanza/db.sqlite3` | Una sola base SQLite contiene las tablas de los distintos módulos |
+| Fotografías y documentos | `MinIO/dashboard-personal/` | Bucket configurado actualmente; MinIO administra su estructura interna |
+| Fotografías de personal | Objetos `personas/activos/` y `personas/pasivos/` | El nombre generado por el modelo usa la cédula y extensión `.png` |
+| Documentos de renuncia | Objetos `renuncias/` | El modelo genera rutas de documentos PDF |
+| Credenciales | `.env` | Necesarias para conectar servicios y APIs |
+| Respaldos locales | `/root/bonanza-backups/` | Fuera del repositorio de trabajo |
+
+La base guarda las referencias a las fotografías; los bytes de las imágenes se almacenan en MinIO. **Copiar SQLite no respalda las fotografías.** Tampoco se debe renombrar, mover o borrar manualmente un archivo dentro del volumen de MinIO: los objetos pueden incluir metadatos y fragmentos internos.
+
+Las rutas actuales de SQLite, MinIO y `staticfiles/` se conservaron durante la reorganización porque los servicios y sincronizadores ya las utilizan. Cambiarlas requiere actualizar esas dependencias y realizar una migración planificada.
+
+GitHub contiene el código, las migraciones y la configuración versionable. El estado actual de la base, fotografías, `.env`, logs y dependencias **no se incorpora a los commits normales**. El historial antiguo contiene objetos LFS; un clon completo puede necesitar Git LFS. El historial no sustituye a un respaldo actualizado de producción.
+
+## Requisitos e instalación local
+
+El proyecto usa Django 5.2, SQLite, MinIO/S3 y las bibliotecas indicadas en `requirements.txt`. La VM fue verificada con Python 3.14; eso describe el entorno actual, no una certificación de compatibilidad para cualquier versión de Python o sistema operativo. Los procesos de consulta usan `fcntl` y señales de Unix, por lo que Linux es el entorno de referencia para ejecutar el sistema completo.
+
+Para preparar un entorno independiente:
 
 ```bash
+git clone git@github.com:yuchuariRBO/DashBoard_BZA.git bonanza
+cd bonanza
 python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-venv/bin/python inventario_bonanza/manage.py migrate
-venv/bin/python inventario_bonanza/manage.py runserver
+venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
+chmod 600 .env
 ```
 
-## Configuracion de produccion en la VM
+Antes de iniciar, editar `.env`:
+
+1. Establecer una `DJANGO_SECRET_KEY` propia y reemplazar todos los valores de ejemplo.
+2. Usar `DEBUG=True` únicamente en desarrollo y ajustar hosts y orígenes locales.
+3. Cambiar `DATABASE_NAME` a una ruta SQLite local propia; el ejemplo apunta a la VM de producción.
+4. Ajustar `LOG_DIR` y `RUN_DIR` a rutas escribibles de este entorno, o eliminar esas dos variables para usar los valores predeterminados del proyecto.
+5. Configurar un MinIO independiente, crear el bucket y completar sus credenciales antes de probar carga de archivos.
+6. Mantener desactivadas o sin configurar las integraciones que no deban enviar correos, mensajes o consultas reales durante el desarrollo.
+
+La configuración lee `.env` desde la raíz de `bonanza`; las variables ya definidas en el entorno tienen prioridad. No es necesario ejecutar `source .env` para usar los comandos de Django.
 
 ```bash
-cd /root/bonanza
-/root/bonanza/venv/bin/python inventario_bonanza/manage.py migrate --noinput
-/root/bonanza/venv/bin/python inventario_bonanza/manage.py collectstatic --noinput
-systemctl restart bonanza-gunicorn
-systemctl restart nginx
+venv/bin/python inventario_bonanza/manage.py check
+venv/bin/python inventario_bonanza/manage.py migrate
+venv/bin/python inventario_bonanza/manage.py createsuperuser
+venv/bin/python inventario_bonanza/manage.py runserver 127.0.0.1:8000
 ```
+
+`createsuperuser` crea el acceso administrativo de Django. La organización y el `user_type` usados por los paneles de negocio deben asignarse explícitamente desde la administración correspondiente. Definir `GLOBAL_ADMIN_*` en el archivo de ejemplo no crea automáticamente ese usuario.
+
+Gunicorn se utiliza en producción y debe estar instalado en el entorno que ejecute su unidad systemd; no está declarado en el `requirements.txt` actual. Las cargas con `ImageField` también requieren Pillow. Verificar esos requisitos en una instalación nueva y agregarlos al proceso de aprovisionamiento. Playwright requiere sus navegadores si se utiliza una fuente que los necesite; instalar solo los necesarios para esos conectores.
 
 ## Variables de entorno
 
-### Django
+El archivo [`.env.example`](.env.example) sirve como plantilla. Esta tabla distingue los valores consumidos por Django de los que sirven de referencia operativa.
 
-- `DJANGO_SECRET_KEY`
-- `DEBUG`
-- `ALLOWED_HOSTS`
-- `CSRF_TRUSTED_ORIGINS`
-- `APP_URL`
+| Grupo | Variables | Uso |
+|---|---|---|
+| Django | `DJANGO_SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` | Clave, modo de ejecución, hosts y orígenes permitidos; las listas se separan con comas |
+| SQLite | `DATABASE_ENGINE`, `DATABASE_NAME` | Motor y ruta; por defecto SQLite dentro de `inventario_bonanza/` |
+| Archivos S3 | `MINIO_ENDPOINT_URL`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET_NAME`, `MINIO_REGION_NAME` | Backend de almacenamiento usado por Django; región predeterminada `us-east-1` |
+| Servidor MinIO | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Credenciales del servidor cuando su unidad recibe estas variables; revisar la unidad efectiva |
+| API de placas | `PLATE_LOOKUP_API_TOKEN` | Token de integración de consultas de placas |
+| API de personas | `PERSON_LOOKUP_API_TOKEN` | Token de integración de consultas de personas |
+| Sincronizador de galería | `FACE_GALLERY_API_TOKEN` | Token de acceso al feed de metadatos de personal |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_IDS` | Configuración de notificaciones; los IDs se separan con comas |
+| Correo | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | Entrega SMTP; el remitente usa `EMAIL_HOST_USER` |
+| Archivos operativos | `LOG_DIR`, `RUN_DIR` | Raíces de logs y bloqueos temporales |
 
-### Base de datos
+`DATABASE_ADMIN_*`, `DATABASE_DESCRIPTION`, `GLOBAL_ADMIN_*`, `APP_URL`, `DJANGO_SERVICE`, `MINIO_SERVICE`, `NGINX_SITE`, `MINIO_CONSOLE_URL` y `MINIO_PERSON_PHOTO_PATH` aparecen como referencias en la plantilla, pero no son mecanismos automáticos de aprovisionamiento en los settings actuales. SQLite no utiliza usuario y contraseña de conexión. `MINIO_VOLUMES` y `MINIO_OPTS` solo tienen efecto si la unidad de MinIO los consume; la plantilla versionada usa argumentos explícitos en `ExecStart`.
 
-- `DATABASE_ENGINE`
-- `DATABASE_NAME`
-- `DATABASE_ADMIN_USER`
-- `DATABASE_ADMIN_PASSWORD`
-- `DATABASE_DESCRIPTION`
+Las alertas también cuentan con una pantalla de configuración y el modelo `TelegramAlertSettings`. Revisar [la guía de Fail2ban](docs/operations/fail2ban.md) antes de cambiar las acciones del servidor.
 
-### Administrador global
+## Servicios de producción
 
-- `GLOBAL_ADMIN_USERNAME`
-- `GLOBAL_ADMIN_PASSWORD`
-- `GLOBAL_ADMIN_EMAIL`
+| Unidad o componente | Función | Configuración de referencia |
+|---|---|---|
+| `bonanza-gunicorn.service` | Tres workers Django en `127.0.0.1:8000` | `deploy/systemd/bonanza-gunicorn.service` |
+| Drop-in de Gunicorn | Destinos de logs y `UMask=0027` | `deploy/systemd/bonanza-gunicorn.service.d/logging.conf` |
+| `bonanza-plate-lookup-drain.service` | Procesa la cola de placas | `deploy/systemd/bonanza-plate-lookup-drain.service` |
+| `bonanza-plate-lookup-drain.timer` | Inicia o vigila el servicio de placas | `deploy/systemd/bonanza-plate-lookup-drain.timer` |
+| `minio.service` | Almacenamiento local de objetos | `deploy/systemd/minio.service` |
+| `nginx.service` | Proxy HTTPS y archivos estáticos | `deploy/nginx/` |
+| `logrotate.timer` | Ejecuta la rotación del sistema | Regla del proyecto: `deploy/logrotate/bonanza` |
+| `fail2ban.service` | Protección de acceso SSH y posibles alertas | `deploy/security/fail2ban/` |
 
-### MinIO / S3
+El timer de placas usa `OnBootSec=30`, `OnUnitInactiveSec=60` y `AccuracySec=5`. No ejecuta una consulta cada minuto si el drenador anterior sigue activo. Los workers de personas también pueden iniciarse desde la aplicación; no se incluye una unidad systemd activa dedicada a personas en este despliegue.
 
-- `MINIO_ROOT_USER`
-- `MINIO_ROOT_PASSWORD`
-- `MINIO_ACCESS_KEY`
-- `MINIO_SECRET_KEY`
-- `MINIO_BUCKET_NAME`
-- `MINIO_ENDPOINT_URL`
-- `MINIO_CONSOLE_URL`
-- `MINIO_VOLUMES`
-- `MINIO_OPTS`
-- `MINIO_PERSON_PHOTO_PATH`
-
-### API de consultas
-
-- `PLATE_LOOKUP_API_TOKEN`
-- `PERSON_LOOKUP_API_TOKEN`
-- `FACE_GALLERY_API_TOKEN`
-
-### Telegram
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_IDS`
-
-### Correo
-
-- `EMAIL_HOST`
-- `EMAIL_PORT`
-- `EMAIL_USE_TLS`
-- `EMAIL_HOST_USER`
-- `EMAIL_HOST_PASSWORD`
-
-### Servicios locales
-
-- `DJANGO_SERVICE`
-- `MINIO_SERVICE`
-- `NGINX_SITE`
-
-## Endpoints web principales
-
-- `/login/`
-- `/logout/`
-- `/role_redirect/`
-- `/global/dashboard/`
-- `/global/placas/`
-- `/global/consultas-personas/`
-- `/server/`
-- `/server/api/`
-
-## API de placas
-
-### URL
-
-```text
-GET /api/plate-lookup/<placa>/
-```
-
-### Autenticacion
-
-Se debe configurar `PLATE_LOOKUP_API_TOKEN` y enviar:
-
-```text
-X-Plate-Lookup-Token: <token>
-```
-
-### Ejemplo
+Las unidades activas y sus drop-ins están en `/etc/systemd/system/`; las de `deploy/` son configuración revisable para esta VM, con rutas absolutas. No copiar todas las plantillas encima de una instalación existente sin comparar sus personalizaciones. Los ejemplos de operación con `sudo` asumen un administrador autorizado.
 
 ```bash
-curl -H "X-Plate-Lookup-Token: <token>" \
+sudo systemctl is-active bonanza-gunicorn nginx minio
+sudo systemctl status bonanza-plate-lookup-drain.timer --no-pager
+sudo systemctl list-timers --all
+sudo systemctl cat bonanza-gunicorn
+sudo systemctl cat bonanza-plate-lookup-drain
+```
+
+Después de editar una unidad o drop-in, ejecutar `sudo systemctl daemon-reload` y reiniciar únicamente el servicio afectado. Cambiar un archivo versionado en `deploy/` no modifica por sí solo la configuración instalada en `/etc/`.
+
+## Actualizar un despliegue existente
+
+Primero revisar el estado local, la rama y los commits que se publicarán. Conservar un respaldo reciente de SQLite y MinIO antes de aplicar migraciones. Las pruebas deben ejecutarse con configuración independiente de producción cuando existan integraciones reales.
+
+```bash
+cd /root/bonanza
+git status --short --branch
+git pull --ff-only origin main
+venv/bin/python inventario_bonanza/manage.py check
+venv/bin/python inventario_bonanza/manage.py showmigrations gestion_personal
+venv/bin/python inventario_bonanza/manage.py migrate --plan
+```
+
+Revisar el plan antes de aplicar cambios de esquema. Por ejemplo, la migración `0021_remove_certificate_verification` elimina la tabla del antiguo módulo de verificación de certificados. El historial de migraciones se conserva aunque una funcionalidad haya sido retirada.
+
+Una vez revisado el plan y creado el respaldo:
+
+```bash
+sudo /root/bonanza/venv/bin/python inventario_bonanza/manage.py migrate --noinput
+sudo /root/bonanza/venv/bin/python inventario_bonanza/manage.py collectstatic --noinput
+sudo systemctl restart bonanza-gunicorn
+sudo systemctl is-active bonanza-gunicorn nginx minio
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://bonanza.robio-ai.com/login/
+```
+
+Si cambió un worker persistente, reiniciar también su servicio en una ventana coordinada. Si cambió Nginx, validar con `sudo nginx -t` y después usar `sudo systemctl reload nginx`. No reiniciar MinIO ni otros servicios de forma rutinaria cuando sus configuraciones no cambiaron.
+
+Las rutas bajo `/root/` y el archivo `.env` tienen permisos restringidos; algunos comandos de Django requieren `sudo` en esta VM. En una instalación nueva conviene definir un usuario de servicio y rutas de datos apropiadas para ese entorno. No relajar los permisos de `.env` para resolver una lectura denegada.
+
+## Logs y rotación
+
+| Archivo relativo a `logs/` | Contenido |
+|---|---|
+| `application/django.log` | Eventos generales de Django y la aplicación |
+| `errors/errors.log` | Eventos de nivel `ERROR` o superior; pueden aparecer también en su categoría original |
+| `security/security.log` | Eventos del logger `django.security`, incluidos rechazos de seguridad |
+| `notifications/notifications.log` | Eventos de correo y Telegram |
+| `lookups/people/people.log` | Eventos del procesamiento de consultas de personas |
+| `lookups/people/worker.log` | Inicio del drenador y salida de sus subprocesos |
+| `lookups/plates/plates.log` | Eventos del procesamiento de consultas de placas |
+| `lookups/plates/worker.log` | Salida y errores de subprocesos de placas |
+| `gunicorn/access.log` | Solicitudes recibidas por Gunicorn |
+| `gunicorn/error.log` | Arranque, errores de Gunicorn y salida capturada |
+
+Los archivos se crean cuando se emite su primer evento. Que una carpeta esté vacía no significa que el servicio esté fallando. Los registros históricos anteriores a la reorganización se conservaron en `application/django.log`; no se intentó clasificarlos retrospectivamente.
+
+Django usa `WatchedFileHandler`, adecuado para la rotación externa sin hacer competir a los workers por renombrar archivos. La regla activa está en `/etc/logrotate.d/bonanza` y su fuente en `deploy/logrotate/bonanza`:
+
+- Evaluación diaria y hasta 14 archivos rotados por log.
+- Compresión con `delaycompress`.
+- `maxsize 25M` evaluado cuando corre logrotate; no es un límite continuo del tamaño.
+- Los logs de Gunicorn y `worker.log` usan `copytruncate` porque mantienen descriptores abiertos; esa técnica puede perder algunas líneas durante la copia y truncado.
+- En la VM, los directorios de logs tienen grupo `robiotec` y permisos restrictivos; las unidades aplican `UMask=0027`.
+
+```bash
+sudo tail -f /root/bonanza/logs/application/django.log
+sudo tail -f /root/bonanza/logs/errors/errors.log
+sudo tail -f /root/bonanza/logs/gunicorn/error.log
+sudo journalctl -u bonanza-plate-lookup-drain -n 100 --no-pager
+sudo journalctl -u minio -n 100 --no-pager
+sudo logrotate --debug /etc/logrotate.conf
+```
+
+Nginx mantiene sus logs en `/var/log/nginx/`. Los mensajes de systemd de MinIO y de los workers permanecen en el journal; no se duplican artificialmente dentro de `bonanza`. Los bloqueos están en `run/`, no en `logs/`, y no deben borrarse con procesos activos.
+
+## Consultas externas y procesamiento
+
+Las consultas de personas y placas persisten sus respuestas en tablas propias dentro de SQLite. Los conectores pueden devolver resultados parciales si una fuente falla, cambia su interfaz, exige autenticación o excede su tiempo de respuesta.
+
+| Estado | Significado |
+|---|---|
+| `pending` | Solicitud registrada y pendiente de procesamiento |
+| `running` | Consulta en ejecución |
+| `completed` | Consulta completada |
+| `completed_with_errors` | Resultado guardado con errores de alguna fuente |
+| `failed` | Consulta fallida |
+
+Los drenadores usan bloqueos exclusivos para evitar ejecuciones simultáneas incompatibles. Las consultas individuales reciben un timeout acotado. El drenador de placas puede recuperar registros `running` antiguos de acuerdo con `--stale-minutes`. Un proceso con `--limit 0` puede atender toda la cola de placas; no debe iniciarse de forma indiscriminada sobre producción.
+
+Comandos de referencia — **ejecutan trabajo real y pueden contactar fuentes externas**:
+
+```bash
+venv/bin/python inventario_bonanza/manage.py lookup_plate ABC1234 --timeout-seconds 120
+venv/bin/python inventario_bonanza/manage.py lookup_person 0102030405 --timeout-seconds 120
+venv/bin/python inventario_bonanza/manage.py drain_plate_lookups --limit 10 --sleep 5
+venv/bin/python inventario_bonanza/manage.py drain_person_lookups --limit 2 --sleep 2
+```
+
+Para consultar opciones sin ejecutar trabajo:
+
+```bash
+venv/bin/python inventario_bonanza/manage.py help drain_plate_lookups
+venv/bin/python inventario_bonanza/manage.py help drain_person_lookups
+```
+
+## Rutas web y APIs
+
+### Navegación principal
+
+| Ruta | Función |
+|---|---|
+| `/login/`, `/logout/`, `/role_redirect/` | Sesión y redirección por perfil |
+| `/global/dashboard/` | Administración global |
+| `/global/organizaciones/`, `/global/usuarios/` | Organizaciones y cuentas |
+| `/global/placas/`, `/global/consultas-personas/` | Consulta y revisión de resultados guardados |
+| `/global/alertas/` | Configuración de alertas |
+| `/rh/dashboard/`, `/rh/gestion/` | Tableros de RRHH |
+| `/rh/personas/`, `/rh/alojamiento/`, `/rh/comedores/` | Personal y asignaciones |
+| `/operador/dashboard/`, `/seguridad/dashboard/` | Operación y seguridad física |
+| `/medico/dashboard/`, `/tecnico/dashboard/` | Módulos médico y técnico |
+| `/server/`, `/server/api/` | Estado del servidor; requiere sesión y autorización |
+| `/media-minio/<ruta>` | Entrega de archivos privados según permisos |
+
+Las rutas disponibles no conceden por sí solas acceso: cada operación aplica sus validaciones de perfil y alcance. Ver [urls.py](inventario_bonanza/gestion_personal/urls.py) para el inventario completo.
+
+### APIs de integración
+
+| Método y ruta | Cabecera requerida | Variable configurada |
+|---|---|---|
+| `GET /api/plate-lookup/<placa>/` | `X-Plate-Lookup-Token` | `PLATE_LOOKUP_API_TOKEN` |
+| `GET /api/person-lookup/<cedula>/` | `X-Person-Lookup-Token` | `PERSON_LOOKUP_API_TOKEN` |
+| `GET /api/face-gallery/people/` | `X-Face-Gallery-Token` | `FACE_GALLERY_API_TOKEN` |
+
+Sin token configurado o con cabecera incorrecta, las APIs devuelven `401` y `{"ok": false, "error": "unauthorized"}`. Los tokens son credenciales de integración globales, no sesiones de usuario ni permisos limitados automáticamente a una organización. El feed de galería recorre el personal y devuelve metadatos; no entrega los bytes de las fotografías.
+
+Ejemplos con valores ficticios:
+
+```bash
+curl -H 'X-Plate-Lookup-Token: TOKEN_DE_INTEGRACION' \
   https://bonanza.robio-ai.com/api/plate-lookup/ABC1234/
-```
 
-### Respuesta
-
-Devuelve un JSON con:
-
-- `ok`
-- `record`
-- `error` cuando aplica
-
-La estructura de `record` incluye:
-
-- `placa`
-- `estado`
-- `propietario`
-- `marca`
-- `modelo`
-- `anio`
-- `clase`
-- `tipo`
-- `servicio`
-- `uso`
-- `vin`
-- `motor`
-- `source_errors`
-- `normalized_data`
-
-### Comportamiento
-
-- Si no existe el registro, se crea en estado `pending`
-- La consulta se procesa en segundo plano
-- Si faltan credenciales externas, la respuesta puede traer errores por fuente
-
-## API de personas
-
-### URL
-
-```text
-GET /api/person-lookup/<cedula>/
-```
-
-### Autenticacion
-
-Se debe configurar `PERSON_LOOKUP_API_TOKEN` y enviar:
-
-```text
-X-Person-Lookup-Token: <token>
-```
-
-### Ejemplo
-
-```bash
-curl -H "X-Person-Lookup-Token: <token>" \
+curl -H 'X-Person-Lookup-Token: TOKEN_DE_INTEGRACION' \
   https://bonanza.robio-ai.com/api/person-lookup/0102030405/
+
+curl -H 'X-Face-Gallery-Token: TOKEN_DE_INTEGRACION' \
+  https://bonanza.robio-ai.com/api/face-gallery/people/
 ```
 
-### Respuesta
+Las APIs de consulta responden con `ok` y `record`; los errores de validación incorporan `error`. `record.estado` contiene el estado del procesamiento. Las respuestas de personas incluyen identidad, totales judiciales y de citaciones, datos por fuente y `source_errors`; las de placas incluyen propietario, características del vehículo, datos normalizados y errores por fuente. Los campos completos se construyen en las funciones `_person_lookup_api_payload` y `_plate_lookup_api_payload` de `views.py`.
 
-Devuelve un JSON con:
+Si no hay un resultado reutilizable, un GET de consulta **puede registrar una solicitud y lanzar trabajo en segundo plano**. No usar esos endpoints para una comprobación de salud sin efectos. Un resultado en estado `pending` o `running` no equivale a una consulta terminada; los resultados guardados se reutilizan según la lógica actual, sin prometer una actualización automática por antigüedad.
 
-- `ok`
-- `record`
-- `error` cuando aplica
+## Respaldos y recuperación
 
-La estructura de `record` incluye:
+Un respaldo completo debe contemplar tres conjuntos: **SQLite**, **objetos de MinIO** y **configuración necesaria para recuperar la instalación**, incluidas las credenciales almacenadas de forma segura. Git cubre el código; no reemplaza ninguno de esos respaldos operativos.
 
-- `cedula`
-- `estado`
-- `nombre_completo`
-- `procesos_actor_total`
-- `procesos_demandado_total`
-- `citaciones_total`
-- `normalized_data`
-- `source_errors`
+### Copias locales encontradas
 
-### Comportamiento
+| Archivo en `/root/bonanza-backups/` | Fecha | Alcance |
+|---|---|---|
+| `db.sqlite3.backup-20260822-hr-requirements` | 22 de agosto de 2026 | Copia histórica de SQLite, aproximadamente 72 MiB |
+| `db.sqlite3.before-reorganization-20261108` | 8 de noviembre de 2026 | Copia consistente de SQLite previa a la reorganización, aproximadamente 107 MiB |
 
-- Si no existe el registro, se crea en estado `pending`
-- La consulta se procesa en segundo plano
-- Las fuentes que requieren captcha o navegador pueden reportar error parcial
+Estas copias no incluyen las fotografías de MinIO. La copia temporal del código en `/tmp/bonanza-before-reorganization/` se creó para la intervención y puede desaparecer al limpiar temporales. No se encontró una programación automática de respaldo de la plataforma en las tareas revisadas; las copias locales tampoco protegen frente a la pérdida completa del disco.
 
-## API de estado del servidor
+### Ejemplo de respaldo consistente de SQLite
 
-### URL
+Ejecutar con un usuario que pueda leer la base y escribir en el directorio de respaldos. El ejemplo usa la ruta de producción actual; adaptarla si cambió `DATABASE_NAME`. La API de backup de SQLite permite obtener una copia consistente sin copiar a ciegas un archivo abierto.
 
-```text
-GET /server/api/
+```python
+from datetime import datetime, timezone
+from pathlib import Path
+import os
+import sqlite3
+
+source = Path('/root/bonanza/inventario_bonanza/db.sqlite3')
+backup_dir = Path('/root/bonanza-backups')
+backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+destination = backup_dir / f'db-{stamp}.sqlite3'
+descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+os.close(descriptor)
+
+with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as current:
+    with sqlite3.connect(destination) as copied:
+        current.backup(copied)
+        result = copied.execute('PRAGMA quick_check').fetchone()[0]
+        if result != 'ok':
+            raise RuntimeError(f'La copia requiere revisión: {result}')
+print(destination)
 ```
 
-### Acceso
+### Fotografías, documentos y restauración
 
-- Requiere sesion autenticada
-- El acceso en la interfaz web esta restringido a `global_admin`
+Para respaldar objetos puede usarse una herramienta S3 autorizada que preserve las claves de los objetos. Si se decide copiar el **volumen completo** de MinIO a nivel de archivos, detener las escrituras de Django, workers y sincronizadores externos, detener MinIO y copiar el volumen completo con sus metadatos en una ventana coordinada. Una copia de carpetas mientras hay escrituras no debe darse por consistente.
 
-### Incluye
+Conservar varias fechas y al menos una copia externa al servidor. Las credenciales y los respaldos de personal requieren acceso restringido. La restauración debe probarse primero en un entorno independiente:
 
-- host
-- uptime
-- cpu
-- memoria
-- discos
-- base de datos
-- procesos de consulta
-- colas de placas y personas
+1. Elegir una copia compatible de base, objetos y configuración.
+2. Comprobar integridad de SQLite y disponibilidad de los objetos referenciados.
+3. Preparar la versión de código y esquema correspondiente.
+4. Restaurar en una ubicación separada y validar usuarios, registros y fotografías.
+5. Coordinar el cambio de producción y el tratamiento de datos generados después de la copia.
 
-## MinIO y archivos
+Restaurar una base antigua sobre producción sustituye su estado por el de esa fecha. No ejecutar una restauración únicamente para recuperar espacio ni usar `migrate` como sustituto de recuperar datos.
 
-- MinIO escucha solo en `127.0.0.1:9000` y `127.0.0.1:9001`.
-- El bucket no concede lectura anonima. La ruta `/media-minio/` pasa por Django y exige sesion y acceso a la organizacion del archivo.
-- El puerto 9443 expone la API S3 para el sincronizador autorizado, restringida en UFW a `207.246.68.223`. Actualizar la regla si cambia la IP del cliente.
-- `collectstatic` publica el contenido de `inventario_bonanza/static/`
+## Pruebas y validación
 
-## Seguridad del servidor
-
-- UFW permite 80/tcp y 443/tcp para la web, limita 22/tcp publico y 22/tcp por `wg0` desde `10.0.0.0/24`, y permite 9443/tcp solo desde `207.246.68.223`. Los demas puertos entrantes estan denegados.
-- SSH admite unicamente al usuario `robiotec` y nunca a `root`. Hacia la IP publica `216.128.158.136` solo acepta la clave `robiotec-2026` (huella `SHA256:2Vm+QulZq93o5nv3ZzfJ5ynf+IF/s7E7FAS9iWdmI38`); no ofrece contrasena.
-- Hacia `10.0.0.3` por WireGuard, el equipo puede entrar con la contrasena de `robiotec` o con su clave anterior (huella `SHA256:zem4qlWS/6JotIMixFgGoumAoJVqH8NoBwvI+cZZpi4`). Las claves autorizadas se guardan en archivos separados bajo `/home/robiotec/.ssh/` y no se versionan.
-- Con VPN: `ssh robiotec@10.0.0.3`. Sin VPN: `ssh robiotec@216.128.158.136` usando la clave privada correspondiente a `robiotec-2026`. `MaxAuthTries=3` y `LoginGraceTime=30` reducen intentos por conexion.
-- Fail2ban supervisa `sshd` con journal de systemd; tras cinco fallos en diez minutos aplica un bloqueo UFW de una hora.
-- Las configuraciones de SSH y Fail2ban activas tienen copia en `deploy/security/`. El bloque `deploy/security/sshd-vpn-match.conf` se coloca al final de `/etc/ssh/sshd_config`, despues de los ajustes globales. La configuracion de la web esta en `deploy/nginx/bonanza.conf`; Certbot administra los certificados en `/etc/letsencrypt/`.
-- No borrar `.env`, `inventario_bonanza/db.sqlite3`, `MinIO/`, `venv/`, `staticfiles/` ni `logs/` durante una limpieza: son datos o componentes de ejecucion. No se versionan.
-
-Comprobaciones:
+Las pruebas se organizan en `gestion_personal/tests/`. Cubren navegación y perfiles, aislamiento, archivos privados, consultas guardadas, identidad, errores públicos, carga de conectores y rutas de logging. Durante la reorganización del 8 de noviembre de 2026 se aprobaron **88 pruebas** con base temporal.
 
 ```bash
-sshd -t && sshd -T | grep -E 'permitrootlogin|passwordauthentication|maxauthtries'
-wg show wg0
-ufw status verbose
-fail2ban-client status sshd
-nginx -t
-systemctl is-active ssh fail2ban nginx bonanza-gunicorn minio
+venv/bin/python inventario_bonanza/manage.py check
+venv/bin/python inventario_bonanza/manage.py makemigrations --check --dry-run
+venv/bin/python inventario_bonanza/manage.py test gestion_personal --noinput
+git diff --check
 ```
 
-## Branding
+Ejecutar preferiblemente en un entorno de pruebas, con configuración e integraciones propias. Django crea una base de pruebas separada; no definir su destino como la base activa. `LOG_DIR` y `RUN_DIR` pueden apuntarse a directorios temporales para evitar mezclar los registros y bloqueos de pruebas con producción.
 
-- Logo principal: `inventario_bonanza/static/img/logo.png`
-- Favicon: el mismo logo
-- Login con cabecera visual del proyecto
-
-## Pendientes
-
-- `www.bonanza.robio-ai.com` no tiene DNS activo aun
-- Si se quiere usar `www`, hay que crear el A record y volver a emitir el certificado
-- Revisar si se desea cambiar SQLite por PostgreSQL para produccion
-- Confirmar si MinIO sera local definitivo o migrado a otro almacenamiento
-- Definir si los tokens de API se consumiran solo internamente o desde sistemas externos
-- Rotar `DJANGO_SECRET_KEY` por una clave larga; el cambio cerrara las sesiones actuales.
-
-## Comandos utiles
-
-Ver estado de servicios:
+Comprobaciones de servicio sin lanzar consultas externas:
 
 ```bash
-systemctl status bonanza-gunicorn
-systemctl status nginx
+sudo systemctl is-active bonanza-gunicorn nginx minio
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  https://bonanza.robio-ai.com/login/
+curl --fail http://127.0.0.1:9000/minio/health/live
+sudo nginx -t
+sudo logrotate --debug /etc/logrotate.conf
 ```
 
-Ver logs:
+La página de login respondió `200` y el endpoint local de salud de MinIO respondió `200` en la verificación de la reorganización. Las pruebas automatizadas no equivalen a una auditoría completa de infraestructura ni garantizan la disponibilidad de fuentes externas.
+
+## Diagnóstico de problemas
+
+| Síntoma | Revisar primero |
+|---|---|
+| Nginx devuelve `502` o `503` | Estado de `bonanza-gunicorn`, `logs/gunicorn/error.log`, puerto local 8000 y journal |
+| Django no puede leer `.env` | Usuario efectivo y permisos; usar el usuario autorizado sin publicar el archivo |
+| Fotografías no aparecen | Salud de MinIO, credenciales del backend, bucket y referencias guardadas; comprobar también sesión y organización |
+| Una consulta queda pendiente | Estado del timer y drenador, `logs/lookups/`, cola visible en el panel y procesos activos |
+| Una fuente devuelve error parcial | `source_errors`, conectividad y cambios de esa fuente; no borrar el resultado guardado para diagnosticar |
+| API devuelve `401` | Variable de token configurada, cabecera correcta y servicio reiniciado tras un cambio de entorno |
+| Formulario devuelve `403` CSRF | Origen HTTPS, `CSRF_TRUSTED_ORIGINS`, cookies y cabecera de proxy |
+| Faltan CSS o imágenes del sitio | `collectstatic`, ruta `staticfiles/`, alias y permisos de Nginx |
+| La VM se queda sin espacio | `df -h`, tamaños por directorio y logs; proteger SQLite y el volumen MinIO |
 
 ```bash
-journalctl -u bonanza-gunicorn -f
-journalctl -u nginx -f
-tail -f logs/application/django.log
+df -h /
+sudo du -h --max-depth=1 /root/bonanza
+sudo journalctl -u bonanza-gunicorn -n 100 --no-pager
+sudo journalctl -u bonanza-plate-lookup-drain -n 100 --no-pager
+sudo journalctl -u minio -n 100 --no-pager
 ```
 
-Verificacion rapida:
+## Mantenimiento y seguridad
 
-```bash
-python3 inventario_bonanza/manage.py check
-```
+- Mantener `.env`, los tokens y los respaldos de personal fuera de los commits. No incluir credenciales reales en ejemplos, incidencias o logs compartidos.
+- No borrar `db.sqlite3`, `MinIO/`, migraciones, `venv/` ni `staticfiles/` como limpieza rutinaria: son datos o componentes utilizados por la instalación.
+- Limpiar únicamente cachés regenerables y logs antiguos mediante sus mecanismos de retención. Conservar los bloqueos mientras haya procesos activos.
+- El acceso a `/media-minio/` pasa por Django; las rutas de objetos no son una autorización por sí mismas. La configuración versionada bloquea la entrega directa de `/media/` desde Nginx.
+- Los puertos locales de MinIO son 9000 y 9001. El proxy S3 de referencia usa 9443 para un sincronizador autorizado; revisar Nginx y el firewall efectivos antes de cambiar esa exposición.
+- Las configuraciones de SSH, VPN y Fail2ban están en `deploy/security/`. Las reglas activas deben inspeccionarse en el servidor; la existencia de un script de cambio no significa que ya se haya ejecutado.
+- Los scripts de `deploy/scripts/` modifican configuración y, en algunos casos, ejecutan migraciones o reinician servicios. Leerlos antes de ejecutarlos; no forman parte del arranque normal del dashboard.
+- No revertir una migración o un respaldo sobre producción sin evaluar los datos que se perderían. Los cambios de esquema y el código deben mantenerse compatibles.
+
+## Documentación complementaria
+
+- [Arquitectura, estructura y verificación de la reorganización](docs/architecture.md).
+- [Auditoría de septiembre y decisiones de aislamiento](docs/audits/2026-09-24.md).
+- [Páginas de error y configuración de seguridad](docs/operations/errors-and-security.md), documento histórico con el alcance de aquella intervención.
+- [Alertas de Fail2ban por Telegram](docs/operations/fail2ban.md).
+- [Configuración central de logging](inventario_bonanza/inventario_bonanza/logging_config.py).
+- [Servicios systemd](deploy/systemd/) y [regla de rotación](deploy/logrotate/bonanza).
+- [Plantilla de variables de entorno](.env.example).
