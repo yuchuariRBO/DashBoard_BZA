@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mb-4">
+  <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
     <h1><i class="fas fa-globe me-2"></i>{% if user.organization %}Administración {{ user.organization.name }}{% else %}Administrador Global{% endif %}</h1>
     <div class="d-flex gap-2">
       <a href="{% url 'global_person_create' %}" class="btn btn-info text-white">

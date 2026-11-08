@@ -58,7 +58,7 @@
     <div class="col-md-6 col-xl-4">
       <article class="room-card status-{{ row.rack_status }}">
         <div class="p-3">
-          <div class="d-flex justify-content-between align-items-start mb-2">
+          <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start mb-2">
             <div><div class="room-title">Habitación {{ row.room.number }}</div><div class="room-meta">{% if row.room.camp %}{{ row.room.camp }} · {% endif %}{{ row.room.block }}{% if row.room.house %} · {{ row.room.house }}{% endif %}</div></div>
             {% if row.rack_status == 'free' %}<span class="badge bg-success">Libre</span>{% elif row.rack_status == 'occupied' %}<span class="badge bg-primary">Ocupada</span>{% elif row.rack_status == 'reserved' %}<span class="badge bg-warning text-dark">Reservada</span>{% else %}<span class="badge bg-danger">Fuera de servicio</span>{% endif %}
           </div>

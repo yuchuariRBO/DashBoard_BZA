@@ -39,3 +39,10 @@ Thumbs.db
 
 # Process locks and temporary runtime state
 run/
+
+# Private support uploads and local monitoring secrets
+private_support/
+*/private_support/
+deploy/observability/secrets/
+deploy/observability/.env
+deploy/observability/runtime/

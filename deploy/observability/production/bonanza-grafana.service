@@ -1,0 +1,19 @@
+[Unit]
+Description=Bonanza authenticated Grafana
+After=network-online.target bonanza-prometheus.service
+Wants=network-online.target
+[Service]
+User=bonanza-monitor
+Group=bonanza-monitor
+UMask=0027
+ExecStart=/opt/bonanza-observability/grafana/bin/grafana server --homepath=/opt/bonanza-observability/grafana --config=/etc/bonanza-observability/grafana.ini
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bonanza-observability/grafana /var/log/bonanza-observability/grafana
+[Install]
+WantedBy=multi-user.target

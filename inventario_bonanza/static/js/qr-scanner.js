@@ -115,7 +115,10 @@
 
     const config = {
       fps: 10,
-      qrbox: { width: 250, height: 250 },
+      qrbox: (viewWidth, viewHeight) => {
+        const size = Math.min(250, Math.floor(Math.min(viewWidth, viewHeight) * 0.8));
+        return { width: size, height: size };
+      },
       aspectRatio: 1.0,
       disableFlip: false,
       experimentalFeatures: { useBarCodeDetectorIfSupported: true }

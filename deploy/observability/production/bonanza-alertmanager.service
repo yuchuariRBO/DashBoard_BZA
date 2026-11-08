@@ -1,0 +1,18 @@
+[Unit]
+Description=Bonanza local Alertmanager (no external notification transport)
+After=network-online.target
+[Service]
+User=bonanza-monitor
+Group=bonanza-monitor
+UMask=0027
+ExecStart=/opt/bonanza-observability/alertmanager/alertmanager --config.file=/etc/bonanza-observability/alertmanager.yml --storage.path=/var/lib/bonanza-observability/alertmanager --web.listen-address=127.0.0.1:19093 --cluster.listen-address=
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/bonanza-observability/alertmanager
+[Install]
+WantedBy=multi-user.target

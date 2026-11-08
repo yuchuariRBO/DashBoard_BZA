@@ -1,6 +1,6 @@
 # DashboardBZA
 
-Plataforma Django para gestionar personal, organizaciones, accesos, visitantes, vehículos, consultas externas y procesos de Recursos Humanos de Bonanza.
+Plataforma Django para gestionar personal, organizaciones, accesos, visitantes, vehículos, consultas externas, procesos de Recursos Humanos, mesa de ayuda y monitoreo operativo de Bonanza.
 
 Este documento describe el código y la operación de la VM verificados el **8 de noviembre de 2026**. Las rutas absolutas corresponden a esa instalación; deben adaptarse al desplegar en otro servidor.
 
@@ -16,6 +16,7 @@ Este documento describe el código y la operación de la VM verificados el **8 d
 ## Índice
 
 - [Funciones y perfiles](#funciones-y-perfiles)
+- [Mesa de ayuda y Centro de monitoreo](#mesa-de-ayuda-y-centro-de-monitoreo)
 - [Arquitectura](#arquitectura)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Datos y archivos persistentes](#datos-y-archivos-persistentes)
@@ -47,6 +48,29 @@ La plataforma incluye fichas de personal con fotografías, gestión de organizac
 | `tecnico_seguridad` | Gestión de seguridad y asignación de EPP |
 
 Los permisos concretos se aplican en las vistas, formularios y servicios de alcance. Un administrador global sin organización representa al administrador del sistema. La información operativa de las organizaciones tiene filtros de acceso; las **consultas guardadas de personas y placas forman una base compartida entre usuarios autorizados**, conforme a la política actual. No debe asumirse que esas consultas están aisladas por empresa.
+
+## Mesa de ayuda y Centro de monitoreo
+
+**Activos en producción desde el 8 de noviembre de 2026.** Se aplicaron las cuatro migraciones nuevas, se recopilaron los estáticos y se verificó el acceso HTTPS con los permisos reales del administrador `robiotec` y un usuario normal.
+
+| Acceso | Usuarios autorizados | Funciones |
+|---|---|---|
+| [Mesa de ayuda](https://bonanza.robio-ai.com/soporte/) | Todos los usuarios autenticados | Crear solicitudes, adjuntar PNG/JPEG/PDF/TXT, comentar, consultar estado/historial, recibir avisos internos y confirmar o reabrir casos |
+| [Tickets reportados](https://bonanza.robio-ai.com/soporte/?team=1) | Administradores y agentes autorizados | Filtrar y atender casos; asignar responsables, ajustar prioridad y escribir notas internas |
+| [Centro de monitoreo](https://bonanza.robio-ai.com/observabilidad/) | Administradores globales o permisos técnicos explícitos | Usuarios activos, rendimiento, servicios, colas, alertas, reportes recientes y acceso a Grafana |
+| [Grafana](https://bonanza.robio-ai.com/grafana/) | Sesión Django con permiso de monitoreo | Cinco dashboards: estado general, Django/APIs, base de datos, servicios y soporte |
+
+`robiotec`, como administrador global y superusuario, ve los reportes de todas las organizaciones. Cada usuario ordinario solo ve sus propios tickets. Las notas internas y sus adjuntos requieren permisos de atención. Los agentes se habilitan desde **Mesa de ayuda → Configuración**; las políticas SLA están preparadas pero deshabilitadas hasta aprobar sus objetivos.
+
+Grafana utiliza un proxy autenticado: Nginx verifica la sesión y los permisos en Django antes de transmitir la identidad. Los encabezados del navegador no conceden acceso. No hay acceso anónimo ni una segunda contraseña de Grafana para `robiotec`. Los observadores técnicos sin administración reciben el rol Viewer; el centro solo muestra asuntos de tickets si también tienen permisos de soporte.
+
+Prometheus (`127.0.0.1:19090`), Grafana (`127.0.0.1:13000`) y Alertmanager (`127.0.0.1:19093`) escuchan exclusivamente en loopback. El endpoint de métricas exige token y Nginx restringe su acceso a loopback. Las alertas se evalúan cada minuto; **no hay envíos externos habilitados**. SQLite no publica conexiones de servidor ni pool: los paneles explican ese límite.
+
+Los adjuntos se guardan en `/var/lib/bonanza-support/`, fuera de medios públicos y MinIO. Deben respaldarse junto a SQLite. Configuración privada: `/etc/bonanza-observability/`; datos: `/var/lib/bonanza-observability/`; métricas multiproceso: `/run/bonanza-metrics/`.
+
+Antes del despliegue se creó un respaldo consistente de SQLite y configuración en `/var/backups/bonanza/support-monitoring-20261108T182457Z/`. No se modificaron contraseñas de usuarios ni archivos existentes en MinIO. El despliegue incluyó una interrupción breve de Django para aplicar migraciones y arrancar los workers con la instrumentación.
+
+La [guía de uso e instalación](docs/support-monitoring.md) describe modelos, permisos, estados, SLA y entorno aislado. El [informe de despliegue](docs/audits/2026-11-08-production-support-monitoring.md) registra las verificaciones y los pasos operativos. La instalación nativa de esta VM se conserva en [deploy/observability/production/](deploy/observability/production/) y su herramienta de despliegue en [deploy_support_monitoring.py](deploy/scripts/deploy_support_monitoring.py); revisar rutas y respaldos antes de reutilizarla.
 
 ## Arquitectura
 
@@ -97,6 +121,8 @@ bonanza/
 │   │   ├── migrations/                   # Historial del esquema
 │   │   ├── templates/                    # HTML organizado por módulo y perfil
 │   │   └── tests/                        # Pruebas de regresión
+│   ├── support/                          # Tickets, adjuntos privados y atención
+│   ├── observability/                    # Métricas, alertas y monitoreo
 │   ├── static/                           # Activos fuente versionados
 │   ├── staticfiles/                      # Resultado de collectstatic; local
 │   ├── media/                            # Compatibilidad con archivos locales
@@ -106,6 +132,7 @@ bonanza/
 │   ├── people/                           # Conectores de personas
 │   └── plates/                           # Conectores de placas
 ├── deploy/
+│   ├── observability/                    # Grafana, Prometheus, alertas y producción
 │   ├── systemd/                          # Unidades, timer y drop-ins
 │   ├── nginx/                            # Sitios y configuración de errores
 │   ├── logrotate/bonanza                 # Retención de logs
@@ -209,6 +236,11 @@ El archivo [`.env.example`](.env.example) sirve como plantilla. Esta tabla disti
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_IDS` | Configuración de notificaciones; los IDs se separan con comas |
 | Correo | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | Entrega SMTP; el remitente usa `EMAIL_HOST_USER` |
 | Archivos operativos | `LOG_DIR`, `RUN_DIR` | Raíces de logs y bloqueos temporales |
+| Soporte | `SUPPORT_PRIVATE_ROOT`, `SUPPORT_MAX_UPLOAD_BYTES` | Carpeta privada y máximo por archivo (5 MB) |
+| Monitoreo | `OBSERVABILITY_ENABLED`, `MONITOR_METRICS_TOKEN`, `PROMETHEUS_URL`, `GRAFANA_URL` | Instrumentación, token privado y destinos de consulta |
+| Muestreo | `MONITOR_ACTIVE_WINDOW_SECONDS`, `MONITOR_ACTIVITY_SAMPLE_SECONDS`, `MONITOR_SNAPSHOT_SECONDS`, `MONITOR_SERVICE_PROBES` | Ventana activa, caché y destinos de salud autorizados |
+| Umbrales | `MONITOR_SLOW_REQUEST_SECONDS`, `MONITOR_SLOW_SQL_SECONDS` | Solicitudes lentas (10 s) y SQL lento (0.5 s) |
+| Multiproceso Gunicorn | `PROMETHEUS_MULTIPROC_DIR` | Definido en el drop-in; se limpia únicamente antes del arranque completo |
 
 `DATABASE_ADMIN_*`, `DATABASE_DESCRIPTION`, `GLOBAL_ADMIN_*`, `APP_URL`, `DJANGO_SERVICE`, `MINIO_SERVICE`, `NGINX_SITE`, `MINIO_CONSOLE_URL` y `MINIO_PERSON_PHOTO_PATH` aparecen como referencias en la plantilla, pero no son mecanismos automáticos de aprovisionamiento en los settings actuales. SQLite no utiliza usuario y contraseña de conexión. `MINIO_VOLUMES` y `MINIO_OPTS` solo tienen efecto si la unidad de MinIO los consume; la plantilla versionada usa argumentos explícitos en `ExecStart`.
 
@@ -223,7 +255,11 @@ Las alertas también cuentan con una pantalla de configuración y el modelo `Tel
 | `bonanza-plate-lookup-drain.service` | Procesa la cola de placas | `deploy/systemd/bonanza-plate-lookup-drain.service` |
 | `bonanza-plate-lookup-drain.timer` | Inicia o vigila el servicio de placas | `deploy/systemd/bonanza-plate-lookup-drain.timer` |
 | `minio.service` | Almacenamiento local de objetos | `deploy/systemd/minio.service` |
-| `nginx.service` | Proxy HTTPS y archivos estáticos | `deploy/nginx/` |
+| `nginx.service` | Proxy HTTPS, archivos estáticos y acceso administrativo a Grafana | `deploy/nginx/`, `deploy/observability/production/nginx.conf` |
+| `bonanza-prometheus.service` | Métricas privadas, retención 15 días / 512 MB | `deploy/observability/production/bonanza-prometheus.service` |
+| `bonanza-grafana.service` | Dashboards autenticados mediante Django/Nginx | `deploy/observability/production/bonanza-grafana.service` |
+| `bonanza-alertmanager.service` | Agrupación de alertas, receptor sin transporte externo | `deploy/observability/production/bonanza-alertmanager.service` |
+| `bonanza-monitoring-sample.timer` | Muestreo y evaluación local cada minuto | `deploy/observability/production/bonanza-monitoring-sample.timer` |
 | `logrotate.timer` | Ejecuta la rotación del sistema | Regla del proyecto: `deploy/logrotate/bonanza` |
 | `bonanza-weekly-cleanup.timer` | Limpieza semanal, domingos 03:30 UTC con hasta 15 minutos de retraso | `deploy/systemd/bonanza-weekly-cleanup.timer` |
 | `bonanza-weekly-cleanup.service` | Cachés antiguas, paquetes descargados y journal archivado | `deploy/scripts/weekly_cleanup.py` |
@@ -443,6 +479,16 @@ Restaurar una base antigua sobre producción sustituye su estado por el de esa f
 
 ## Pruebas y validación
 
+La ampliación de soporte/monitoreo pasó **135 pruebas** de Django en configuración aislada, verificaciones de concurrencia y revisión responsiva. Para repetir la regresión sin cargar `.env` ni usar la base de producción:
+
+```bash
+venv/bin/python inventario_bonanza/manage.py check --settings=inventario_bonanza.settings_test
+venv/bin/python inventario_bonanza/manage.py test gestion_personal.tests support observability --settings=inventario_bonanza.settings_test
+```
+
+En producción se verificaron los permisos de usuarios, los estáticos, las cuatro migraciones, cinco dashboards autenticados, dos targets Prometheus en estado `up` y tres workers de Gunicorn. No se ejecutaron pruebas de carga intensivas ni se generaron tickets sintéticos en la base real.
+
+
 Las pruebas se organizan en `gestion_personal/tests/`. Cubren navegación y perfiles, aislamiento, archivos privados, consultas guardadas, identidad, errores públicos, carga de conectores y rutas de logging. Durante la reorganización del 8 de noviembre de 2026 se aprobaron **88 pruebas** con base temporal.
 
 ```bash
@@ -516,6 +562,8 @@ sudo journalctl -u bonanza-weekly-cleanup.service -n 100 --no-pager
 - No revertir una migración o un respaldo sobre producción sin evaluar los datos que se perderían. Los cambios de esquema y el código deben mantenerse compatibles.
 
 ## Documentación complementaria
+
+- [Mesa de ayuda y Centro de monitoreo: arquitectura, instalación y guía de uso](docs/support-monitoring.md).
 
 - [Arquitectura, estructura y verificación de la reorganización](docs/architecture.md).
 - [Auditoría de septiembre y decisiones de aislamiento](docs/audits/2026-09-24.md).

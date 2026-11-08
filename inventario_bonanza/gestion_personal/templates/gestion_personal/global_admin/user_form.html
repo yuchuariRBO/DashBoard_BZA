@@ -4,7 +4,7 @@
 {% block title %}Usuario{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
   <h1><i class="fas fa-user-shield me-2"></i>{% if form.instance.pk %}Editar{% else %}Nuevo{% endif %} Usuario</h1>
   <a href="{% url 'global_user_list' %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left me-1"></i>Volver

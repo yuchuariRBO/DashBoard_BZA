@@ -1,0 +1,45 @@
+# Development/test only. Host ports are loopback-bound; no anonymous dashboards.
+services:
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    user: "${OBSERVABILITY_UID:?Set OBSERVABILITY_UID}:${OBSERVABILITY_GID:?Set OBSERVABILITY_GID}"
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.retention.time=15d', '--web.listen-address=127.0.0.1:19090']
+    network_mode: host
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./secrets/metrics-token:/run/secrets/metrics-token:ro
+      - ./runtime/prometheus:/prometheus
+  grafana:
+    image: grafana/grafana:13.3.0
+    user: "${OBSERVABILITY_UID:?Set OBSERVABILITY_UID}:${OBSERVABILITY_GID:?Set OBSERVABILITY_GID}"
+    network_mode: host
+    environment:
+      GF_SERVER_HTTP_ADDR: '127.0.0.1'
+      GF_SERVER_HTTP_PORT: '13000'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SECURITY_ALLOW_EMBEDDING: 'false'
+      GF_AUTH_DISABLE_LOGIN_FORM: 'false'
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-password
+      GF_PLUGINS_PREINSTALL_DISABLED: 'true'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+      - ./secrets/grafana-password:/run/secrets/grafana-password:ro
+      - ./runtime/grafana:/var/lib/grafana
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    profiles: ['host-metrics']
+    network_mode: host
+    command: ['--web.listen-address=127.0.0.1:19100', '--path.procfs=/host/proc', '--path.sysfs=/host/sys', '--path.rootfs=/host/root']
+    volumes: ['/proc:/host/proc:ro', '/sys:/host/sys:ro', '/:/host/root:ro,rslave']
+  alertmanager:
+    image: prom/alertmanager:v0.34.2
+    network_mode: host
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml', '--web.listen-address=127.0.0.1:19093', '--cluster.listen-address=']
+    volumes: ['./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro']
+    # Internal network only. Default receiver intentionally has no transport.

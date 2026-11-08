@@ -1,0 +1,210 @@
+{
+  "uid": "bonanza-support",
+  "title": "Bonanza · Mesa de ayuda",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "tags": [
+    "bonanza"
+  ],
+  "timezone": "America/Guayaquil",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Tickets por estado",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(status)(bonanza_support_tickets)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Tickets por prioridad",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(priority)(bonanza_support_tickets)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Volumen acumulado",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(bonanza_support_tickets)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Primera respuesta promedio",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "bonanza_support_response_sum / clamp_min(bonanza_support_response_count,1)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Resolución promedio",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "bonanza_support_resolution_sum / clamp_min(bonanza_support_resolution_count,1)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Cumplimiento de SLA de resolución",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "bonanza_support_sla_met / bonanza_support_sla_count",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Alcance de las mediciones",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "SLA solo para tickets resueltos con un objetivo configurado. Sin objetivos no se calcula cumplimiento. El volumen es el total almacenado por instante; para cohortes por fechas use Estadísticas de atención de Django. Los responsables y solicitantes no se exportan como etiquetas."
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

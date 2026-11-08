@@ -1,0 +1,7 @@
+<div class="d-flex flex-wrap gap-2 mb-3" aria-label="Mesa de ayuda">
+<a class="btn btn-outline-primary" href="{% url 'support:list' %}">Mis solicitudes</a>
+<a class="btn btn-primary" href="{% url 'support:create' %}"><i class="fas fa-plus me-1"></i>Crear ticket</a>
+<a class="btn btn-outline-secondary" href="{% url 'support:notifications' %}">Notificaciones</a>
+{% if support_agent %}<a class="btn btn-outline-secondary" href="{% url 'support:list' %}?team=1">Cola de soporte</a><a class="btn btn-outline-secondary" href="{% url 'support:dashboard' %}">Estadísticas</a>{% endif %}
+{% if support_configurator %}<a class="btn btn-outline-secondary" href="{% url 'support:configuration' %}">Configuración</a>{% endif %}
+</div>

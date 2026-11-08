@@ -1,0 +1,268 @@
+{
+  "uid": "bonanza-general",
+  "title": "Bonanza · Estado general",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "tags": [
+    "bonanza"
+  ],
+  "timezone": "America/Guayaquil",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Disponibilidad Django",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"bonanza\"}",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Solicitudes por segundo",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(bonanza_http_requests_total[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Latencia P95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by(le)(rate(bonanza_http_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Proporción HTTP 5xx",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(bonanza_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(bonanza_http_requests_total[5m])),0.000001)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "CPU",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(bonanza_host_cpu_percent)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Memoria",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(bonanza_host_memory_percent)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Disco",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(bonanza_host_disk_percent)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Usuarios con actividad reciente",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(bonanza_users_active)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "Alcance de las mediciones",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "SQLite no ofrece conexiones de servidor. Consulte Base de datos para las métricas SQL observadas. CPU y RAM describen el host de Django; en contenedores deben contrastarse con sus límites cgroup."
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

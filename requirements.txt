@@ -12,3 +12,4 @@ httpx
 beautifulsoup4
 playwright
 pypdf
+prometheus-client==0.25.0

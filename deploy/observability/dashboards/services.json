@@ -1,0 +1,268 @@
+{
+  "uid": "bonanza-services",
+  "title": "Bonanza · Servicios",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "tags": [
+    "bonanza"
+  ],
+  "timezone": "America/Guayaquil",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Servicios configurados disponibles",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "bonanza_service_available",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Duración del último sondeo",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "bonanza_service_duration_seconds",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Consultas por servicio y estado",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(service,status)(bonanza_lookup_tasks)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Errores de descarga de artefactos",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(route,status)(rate(bonanza_http_requests_total{route=~\".*download.*|.*media.*|.*export.*\",status=~\"[45]..\"}[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Red del host (exportador opcional)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(device)(rate(node_network_receive_bytes_total{device!=\"lo\"}[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "I/O de disco (exportador opcional)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(device)(rate(node_disk_written_bytes_total[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Procesos del host (exportador opcional)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_procs_running",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Arranque del host (exportador opcional)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_boot_time_seconds",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "Alcance de las mediciones",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "MinIO y APIs: configure MONITOR_SERVICE_PROBES y ejecute sample_monitoring cada minuto. Sin sondeos aparece Sin datos, no un estado saludable inventado. Colas representan registros reales de consultas de personas y placas. node_exporter es opcional y privado; para reinicios de servicios systemd habilite explícitamente su colector systemd. Los fallos de artefactos observados cubren respuestas HTTP de rutas de descarga/exportación, no todos los errores de negocio."
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

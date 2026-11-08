@@ -5,7 +5,7 @@
 {% block title %}Editar Visita Programada{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
   <h1><i class="fas fa-edit me-2"></i>Editar Visita Programada</h1>
   <a href="{% url 'visitas_programadas' %}" class="btn btn-secondary">
     <i class="fas fa-arrow-left me-1"></i>Volver
@@ -54,7 +54,7 @@
             </div>
           </div>
           {{ form.notas|as_crispy_field }}
-          <div class="d-flex justify-content-between">
+          <div class="d-flex flex-wrap gap-2 justify-content-between">
             <button type="submit" class="btn btn-primary">
               <i class="fas fa-save me-1"></i>Guardar Cambios
             </button>

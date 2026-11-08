@@ -35,7 +35,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
   <h1>
     <i class="fas fa-user-hard-hat me-2"></i>Panel de Control - {{ area }}
   </h1>
@@ -51,7 +51,7 @@
   <div class="col-md-4 mb-3 mb-md-0">
     <div class="card card-stat bg-primary text-white">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">Personal del Área</h6>
             <h2 class="mb-0">{{ personal.count }}</h2>
@@ -65,7 +65,7 @@
   <div class="col-md-4 mb-3 mb-md-0">
     <div class="card card-stat bg-warning text-dark">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">De Vacaciones</h6>
             <h2 class="mb-0">{{ vacaciones_activas.count }}</h2>
@@ -79,7 +79,7 @@
   <div class="col-md-4">
     <div class="card card-stat bg-danger text-white">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">Pendientes de Revisión Médica</h6>
             <h2 class="mb-0">{{ sin_revision_medica.count }}</h2>

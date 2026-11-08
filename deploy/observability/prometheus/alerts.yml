@@ -1,0 +1,53 @@
+groups:
+  - name: bonanza
+    rules:
+      - alert: ServiceDown
+        expr: up{job="bonanza"} == 0 or bonanza_service_available == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: 'Django o un servicio configurado no está disponible'}
+      - alert: HighHTTP5xx
+        expr: sum(rate(bonanza_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(bonanza_http_requests_total[5m])), 0.000001) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: 'Más del 5% de solicitudes terminan en 5xx'}
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(bonanza_http_duration_seconds_bucket[5m]))) > 2
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Latencia P95 superior a 2 segundos'}
+      - alert: HighCPU
+        expr: avg(bonanza_host_cpu_percent) > 85
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: 'CPU superior al 85%'}
+      - alert: HighMemory
+        expr: avg(bonanza_host_memory_percent) > 90
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: 'Memoria superior al 90%'}
+      - alert: LowDisk
+        expr: max(bonanza_host_disk_percent) > 85
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: 'Uso de disco superior al 85%'}
+      - alert: SlowSQL
+        expr: sum(rate(bonanza_db_slow_queries_total[5m])) > 0.1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Más de 0.1 consultas lentas por segundo'}
+      - alert: DatabaseErrors
+        expr: sum(increase(bonanza_db_errors_total[5m])) > 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: 'Errores en ejecución SQL observada'}
+      - alert: CriticalSupportBacklog
+        expr: sum(bonanza_support_tickets{priority="critical",status!~"resolved|closed"}) > 5
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: 'Más de cinco tickets críticos abiertos'}
+      - alert: RepeatedTaskFailures
+        expr: bonanza_lookup_recent_failures > 3
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Más de tres consultas fallidas recientes'}

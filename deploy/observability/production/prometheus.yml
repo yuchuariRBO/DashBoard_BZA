@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+rule_files: ['/etc/bonanza-observability/alerts.yml']
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['127.0.0.1:19093']
+scrape_configs:
+  - job_name: bonanza
+    scheme: https
+    metrics_path: /observabilidad/metricas/
+    tls_config:
+      server_name: bonanza.robio-ai.com
+    authorization:
+      type: Bearer
+      credentials_file: /etc/bonanza-observability/metrics-token
+    static_configs:
+      - targets: ['127.0.0.1:443']
+  - job_name: prometheus
+    static_configs:
+      - targets: ['127.0.0.1:19090']

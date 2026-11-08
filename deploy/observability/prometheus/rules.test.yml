@@ -1,0 +1,36 @@
+rule_files: ['alerts.yml']
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="bonanza",instance="test"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: {job: bonanza, instance: test, severity: critical}
+            exp_annotations: {summary: 'Django o un servicio configurado no está disponible'}
+  - interval: 1m
+    input_series:
+      - series: 'bonanza_support_tickets{status="open",priority="critical"}'
+        values: '6+0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: CriticalSupportBacklog
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: 'Más de cinco tickets críticos abiertos'}
+  - interval: 1m
+    input_series:
+      - series: 'bonanza_lookup_recent_failures'
+        values: '4+0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: RepeatedTaskFailures
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: 'Más de tres consultas fallidas recientes'}

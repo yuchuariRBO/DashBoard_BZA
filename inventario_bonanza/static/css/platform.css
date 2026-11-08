@@ -461,6 +461,7 @@ h6 {
 .card.bg-dark .card-body::after,
 .card.bg-secondary .card-body::after {
   content: "";
+  pointer-events: none;
   position: absolute;
   right: -24px;
   bottom: -36px;
@@ -479,4 +480,59 @@ h6 {
     margin-left: 8px;
     margin-right: 8px;
   }
+}
+
+/* Shared responsive sizing: allow grid/flex children to shrink around content. */
+.app-row > *,
+.content .row > *,
+.content .d-flex > *,
+.card,
+.card-body {
+  min-width: 0;
+}
+.content { overflow-wrap: anywhere; }
+.content img { max-width: 100%; height: auto; }
+.content video { max-width: 100%; height: auto; object-fit: contain; }
+.content iframe { max-width: 100%; }
+.content input:not([type="checkbox"]):not([type="radio"]),
+.content select,
+.content textarea { max-width: 100%; }
+.table-responsive,
+.table-container { max-width: 100%; overflow-x: auto; }
+.table-responsive:focus-visible,
+.table-container:focus-visible { outline: 2px solid var(--bonanza-blue); outline-offset: 2px; }
+.content .nav-tabs,
+.content .pagination { flex-wrap: wrap; }
+.content .badge { white-space: normal; overflow-wrap: anywhere; }
+.modal-dialog { max-height: calc(100dvh - 1rem); }
+.modal-content { max-height: calc(100dvh - 1rem); }
+.modal-content > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+}
+.modal-title { min-width: 0; overflow-wrap: anywhere; }
+.modal-header,
+.modal-footer { flex-shrink: 0; }
+.modal-body { min-height: 0; overflow-y: auto; }
+.rh-assistant-history { min-height: 0; overflow-wrap: anywhere; }
+@media (max-width: 991.98px) {
+  .navbar-brand { flex: 1; min-width: 0; white-space: normal; font-size: 1rem; }
+  .navbar-brand .logo-header { flex-shrink: 0; width: 40px; object-fit: contain; }
+  .navbar-toggler { flex-shrink: 0; }
+  .content { padding: .75rem .25rem; }
+  .content .card-header.d-flex { flex-wrap: wrap; gap: .5rem; }
+}
+@media (max-width: 575.98px) {
+  .content .btn-group { flex-wrap: wrap; }
+  .content .btn { white-space: normal; }
+  .content .btn-group > .btn { flex: 1 1 auto; }
+  .modal-dialog { margin: .5rem; }
+  .modal-body { padding: .75rem; }
+  .modal-footer { gap: .25rem; }
+  .rh-assistant-panel { height: min(560px, calc(100dvh - 100px)); }
+}
+@media (pointer: coarse) {
+  .btn, .sidebar a, .nav-link { min-height: 44px; }
 }

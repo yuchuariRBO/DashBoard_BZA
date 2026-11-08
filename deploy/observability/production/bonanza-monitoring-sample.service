@@ -1,0 +1,15 @@
+[Unit]
+Description=Bonanza local monitoring sample and alert evaluation
+After=bonanza-gunicorn.service bonanza-prometheus.service
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0027
+WorkingDirectory=/root/bonanza/inventario_bonanza
+EnvironmentFile=/root/bonanza/.env
+ExecStart=/root/bonanza/venv/bin/python manage.py sample_monitoring
+TimeoutStartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

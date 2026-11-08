@@ -8,28 +8,33 @@
     <link rel="icon" type="image/png" href="{% static 'img/logo.png' %}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="{% static 'css/platform.css' %}">
+    <link rel="stylesheet" href="{% static 'css/platform.css' %}?v=20261108">
     <style>
         html, body {
             height: 100%;
         }
         body {
-            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
             background: #fff;
         }
         .navbar {
             min-height: 66px;
         }
         .app-shell {
-            height: calc(100vh - 66px);
-            overflow: hidden;
+            flex: 1 0 auto;
+            min-height: 0;
         }
         .app-row {
-            height: 100%;
+            min-height: calc(100dvh - 66px);
             flex-wrap: nowrap;
+            align-items: stretch;
         }
         .sidebar {
-            height: 100%;
+            align-self: flex-start;
+            max-height: 100dvh;
             background-color: #343a40;
             color: white;
             overflow-y: auto;
@@ -64,9 +69,6 @@
         }
         .main-panel {
             min-width: 0;
-            height: 100%;
-            overflow-y: auto;
-            overflow-x: hidden;
             background: #fff;
         }
         .content {
@@ -121,33 +123,21 @@
         }
         .modal-dialog-scrollable .modal-body,
         .modal-body {
-            max-height: calc(100vh - 190px);
             overflow-y: auto;
         }
-        @media(max-width:767.98px) {
-            body {
-                overflow: auto;
-            }
-            .app-shell {
-                height: auto;
-                min-height: calc(100vh - 66px);
-                overflow: visible;
-            }
-            .app-row {
-                height: auto;
-                flex-wrap: wrap;
-            }
+        @media (min-width: 992px) {
+            .sidebar.collapse { display: block; }
+        }
+        @media (max-width: 991.98px) {
+            .app-row { flex-wrap: wrap; }
             .sidebar {
                 position: relative;
-                height: auto;
-                max-height: 42vh;
+                max-height: none;
                 flex: 0 0 100%;
                 max-width: 100%;
-            }
-            .main-panel {
-                height: auto;
                 overflow: visible;
             }
+            .main-panel { flex: 0 0 100%; max-width: 100%; }
         }
         @media(max-width:575px) { .rh-assistant-panel { right:12px; bottom:80px; width:calc(100vw - 24px); } .rh-assistant-button { right:16px; bottom:16px; } }
     </style>
@@ -160,7 +150,7 @@
                 <img src="{% static 'img/logo.png' %}" alt="Logo" class="logo-header">
                 Grupo Minero Bonanza
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Abrir menú de usuario">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -195,8 +185,22 @@
     <div class="container-fluid app-shell">
         <div class="row app-row">
             {% if user.is_authenticated %}
-                <aside class="col-md-2 p-0 sidebar">
+                <div class="col-12 d-lg-none py-2">
+                    <button class="btn btn-outline-secondary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="false">
+                        <i class="fas fa-bars me-2" aria-hidden="true"></i>Panel de Control
+                    </button>
+                </div>
+                <aside class="col-lg-2 p-0 sidebar collapse" id="sidebarMenu" aria-label="Navegación principal">
                     <div class="header">Panel de Control</div>
+                    <div class="sidebar-section">Asistencia</div>
+                    <a href="{% url 'support:list' %}" class="{% if '/soporte/' in request.path and request.GET.team != '1' %}active{% endif %}"><i class="fas fa-life-ring me-2"></i>Mesa de ayuda</a>
+                    {% if support_agent %}
+                    <a href="{% url 'support:list' %}?team=1" class="{% if '/soporte/' in request.path and request.GET.team == '1' %}active{% endif %}"><i class="fas fa-headset me-2"></i>Tickets reportados</a>
+                    {% endif %}
+                    {% if monitoring_admin %}
+                    <div class="sidebar-section">Administración</div>
+                    <a href="{% url 'observability:dashboard' %}" class="{% if '/observabilidad/' in request.path %}active{% endif %}"><i class="fas fa-heart-pulse me-2"></i>Centro de monitoreo</a>
+                    {% endif %}
                     {% if user.user_type == 'global_admin' %}
                         <a href="{% url 'dashboard_global_admin' %}" class="{% if 'global/dashboard' in request.path %}active{% endif %}">
                             <i class="fas fa-globe me-2"></i>Dashboard
@@ -479,6 +483,7 @@
     })();
     </script>
     {% endif %}
+    <script src="{% static 'js/responsive.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

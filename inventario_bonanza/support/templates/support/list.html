@@ -1,0 +1,10 @@
+{% extends 'gestion_personal/base.html' %}
+{% block title %}Mesa de ayuda{% endblock %}
+{% block content %}
+<h1><i class="fas fa-life-ring me-2"></i>{% if team %}Cola de soporte{% else %}Mis solicitudes{% endif %}</h1>
+{% include 'support/_nav.html' %}{% include 'support/_filters.html' %}
+<div class="card"><div class="table-responsive" tabindex="0" role="region" aria-label="Tickets"><table class="table table-hover mb-0"><thead><tr><th>Identificador / asunto</th><th>Estado</th><th>Prioridad</th><th>Categoría</th><th>Responsable</th><th>Actualización</th><th>SLA</th></tr></thead><tbody>
+{% for ticket in tickets %}<tr><td><a href="{% url 'support:detail' ticket.pk %}">{{ ticket.subject }}</a><small class="d-block text-muted">{{ ticket.pk }}</small></td><td>{{ ticket.get_status_display }}</td><td><span class="badge {% if ticket.priority == 'critical' %}bg-danger{% else %}bg-secondary{% endif %}">{{ ticket.get_priority_display }}</span></td><td>{{ ticket.category }}</td><td>{{ ticket.assignee.username|default:'Sin asignar' }}</td><td>{{ ticket.updated_at|date:'d/m/Y H:i' }}</td><td>{% if ticket.overdue %}<span class="text-danger">Vencido</span>{% elif ticket.resolution_due_at %}{{ ticket.resolution_due_at|date:'d/m/Y H:i' }}{% else %}Sin SLA{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="text-center py-4">No hay solicitudes para estos filtros.</td></tr>{% endfor %}
+</tbody></table></div></div>
+<nav class="d-flex flex-wrap gap-3 mt-3" aria-label="Paginación">{% if tickets.has_previous %}<a href="?{{ querystring }}&amp;page={{ tickets.previous_page_number }}">Anterior</a>{% endif %}<span>Página {{ tickets.number }} de {{ tickets.paginator.num_pages }}</span>{% if tickets.has_next %}<a href="?{{ querystring }}&amp;page={{ tickets.next_page_number }}">Siguiente</a>{% endif %}</nav>
+{% endblock %}

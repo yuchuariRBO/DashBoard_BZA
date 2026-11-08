@@ -46,7 +46,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
   <h1>
     <i class="fas fa-calendar-alt me-2"></i>Registros por Fecha
   </h1>
@@ -87,7 +87,7 @@
   <div class="col-md-3 mb-3">
     <div class="card bg-success text-white">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">Ingresos</h6>
             <h2 class="mb-0">**{{ registros_personal|length }}**</h2>
@@ -101,7 +101,7 @@
   <div class="col-md-3 mb-3">
     <div class="card bg-danger text-white">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">Salidas</h6>
             <h2 class="mb-0">**{{ total_registros }}**</h2>
@@ -115,7 +115,7 @@
   <div class="col-md-3 mb-3">
     <div class="card bg-info text-white">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">Visitantes</h6>
             <h2 class="mb-0">{{ registros_visitantes.count }}</h2>
@@ -129,7 +129,7 @@
   <div class="col-md-3 mb-3">
     <div class="card bg-warning text-dark">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div>
             <h6 class="card-title mb-0">Vehículos</h6>
             <h2 class="mb-0">{{ registros_vehiculos.count }}</h2>

@@ -1,4 +1,5 @@
 import os
+import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,7 +24,8 @@ def env_list(name, default=''):
     return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
 
 
-load_env_file(PROJECT_DIR / '.env')
+if os.environ.get('BONANZA_LOAD_ENV_FILE', 'True') == 'True':
+    load_env_file(PROJECT_DIR / '.env')
 
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
@@ -77,6 +79,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "gestion_personal",  # Nuestra aplicación
+    "support",
+    "observability",
     "crispy_forms",
     "crispy_bootstrap5",
     "storages",
@@ -86,6 +90,7 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 MIDDLEWARE = [
+    "observability.middleware.MetricsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -108,6 +113,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "support.context_processors.module_access",
             ],
         },
     },
@@ -196,3 +202,22 @@ CSRF_FAILURE_VIEW = 'gestion_personal.error_views.csrf_failure'
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 SESSION_COOKIE_HTTPONLY = True
+
+# Support files are intentionally outside MEDIA_ROOT and the public MinIO proxy.
+SUPPORT_PRIVATE_ROOT = Path(os.environ.get('SUPPORT_PRIVATE_ROOT', str(PROJECT_DIR / 'private_support')))
+SUPPORT_MAX_UPLOAD_BYTES = int(os.environ.get('SUPPORT_MAX_UPLOAD_BYTES', str(5 * 1024 * 1024)))
+OBSERVABILITY_ENABLED = os.environ.get('OBSERVABILITY_ENABLED', 'True') == 'True'
+MONITOR_ACTIVE_WINDOW_SECONDS = int(os.environ.get('MONITOR_ACTIVE_WINDOW_SECONDS', '900'))
+MONITOR_ACTIVITY_SAMPLE_SECONDS = int(os.environ.get('MONITOR_ACTIVITY_SAMPLE_SECONDS', '60'))
+MONITOR_SNAPSHOT_SECONDS = int(os.environ.get('MONITOR_SNAPSHOT_SECONDS', '30'))
+MONITOR_SLOW_REQUEST_SECONDS = float(os.environ.get('MONITOR_SLOW_REQUEST_SECONDS', '10'))
+MONITOR_SLOW_SQL_SECONDS = float(os.environ.get('MONITOR_SLOW_SQL_SECONDS', '0.5'))
+MONITOR_METRICS_TOKEN = os.environ.get('MONITOR_METRICS_TOKEN', '')
+PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', '')
+GRAFANA_URL = os.environ.get('GRAFANA_URL', '')
+# Explicit allowlist, never derived from request input. Empty disables probes.
+MONITOR_SERVICE_PROBES = json.loads(os.environ.get('MONITOR_SERVICE_PROBES', '{}'))
+
+CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+          'monitoring': {'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+                         'LOCATION': str(RUN_DIR / 'monitoring-cache'), 'TIMEOUT': 180}}

@@ -1,0 +1,4 @@
+{% extends 'gestion_personal/base.html' %}
+{% block title %}Crear solicitud de soporte{% endblock %}
+{% block content %}<h1><i class="fas fa-life-ring me-2"></i>Nueva solicitud</h1>{% include 'support/_nav.html' %}
+<div class="row"><div class="col-xl-8"><div class="card card-body"><form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<p class="text-muted">El equipo de soporte evalúa la prioridad. Adjuntos: hasta {{ upload_limit_mb }} MB; PNG, JPEG, PDF o TXT.</p><button class="btn btn-primary" type="submit">Enviar solicitud</button></form></div></div></div>{% endblock %}

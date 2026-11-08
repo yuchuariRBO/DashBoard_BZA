@@ -1,0 +1,297 @@
+{
+  "uid": "bonanza-django",
+  "title": "Bonanza · Django y APIs",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "tags": [
+    "bonanza"
+  ],
+  "timezone": "America/Guayaquil",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Solicitudes por endpoint",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(route)(rate(bonanza_http_requests_total[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "P95 por endpoint",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by(route,le)(rate(bonanza_http_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Solicitudes concurrentes",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(bonanza_http_inflight)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Respuestas por estado",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(status)(rate(bonanza_http_requests_total[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Trabajadores instrumentados vivos",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(bonanza_workers_alive)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Saturación aproximada de workers síncronos",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(bonanza_http_inflight) / clamp_min(sum(bonanza_workers_alive),1)",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Solicitudes lentas (más de 10 s por defecto)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(bonanza_http_slow_requests_total[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Fallos de autenticación",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(bonanza_auth_failures_total[15m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "Actividad por módulo",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bonanza-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(module)(rate(bonanza_module_requests_total[5m]))",
+          "legendFormat": "{{route}}{{status}}{{priority}}{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "title": "Alcance de las mediciones",
+      "type": "text",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Métricas sin rutas dinámicas, IPs, usuarios ni tokens. Requiere PROMETHEUS_MULTIPROC_DIR y hook child_exit de Gunicorn para agregación fiable. Un request lento no demuestra un timeout del worker. Latencia hasta cabeceras, no transmisión completa de archivos."
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}
