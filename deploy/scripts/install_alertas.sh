@@ -12,7 +12,7 @@ ACTION=/etc/fail2ban/action.d/telegram-robio.conf
 JAIL=/etc/fail2ban/jail.d/zz-bonanza-telegram.local
 
 "$PYTHON" "$APP/manage.py" migrate --noinput
-install -m 0644 "$APP/deploy/fail2ban/telegram-robio.conf" "$ACTION"
+install -m 0644 "$APP/../deploy/security/fail2ban/action.d/telegram-robio.conf" "$ACTION"
 if [[ -e $JAIL ]]; then
   echo "Ya existe $JAIL; revísalo antes de continuar." >&2
   exit 1

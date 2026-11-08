@@ -181,47 +181,15 @@ UPLOAD_DIRS = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Generated files are kept outside the application source tree.
 LOG_DIR = Path(os.environ.get('LOG_DIR', str(PROJECT_DIR / 'logs')))
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+RUN_DIR = Path(os.environ.get('RUN_DIR', str(PROJECT_DIR / 'run')))
+RUN_DIR.mkdir(parents=True, exist_ok=True)
+for directory in ('lookups/people', 'lookups/plates', 'gunicorn'):
+    (LOG_DIR / directory).mkdir(parents=True, exist_ok=True)
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '[{asctime}] {levelname} {name}: {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': str(LOG_DIR / 'django.log'),
-            'maxBytes': 10 * 1024 * 1024,
-            'backupCount': 5,
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console', 'file'],
-        'level': 'INFO',
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'gestion_personal': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-    },
-}
+from .logging_config import build_logging_config
+LOGGING = build_logging_config(LOG_DIR)
 
 # Public error pages must never include diagnostic details.
 CSRF_FAILURE_VIEW = 'gestion_personal.error_views.csrf_failure'

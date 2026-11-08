@@ -980,7 +980,7 @@ def global_people_photos_zip(request):
 
 def start_plate_lookup_process(placa, user):
     max_processes = int(getattr(settings, 'PLATE_LOOKUP_MAX_PROCESSES', 1) or 1)
-    lock_path = settings.BASE_DIR / 'plate_lookup_spawn.lock'
+    lock_path = settings.RUN_DIR / 'plate_lookup_spawn.lock'
     try:
         with open(lock_path, 'w') as lock_file:
             fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -1030,8 +1030,8 @@ def start_plate_lookup_process(placa, user):
 
 def start_person_lookup_process(cedula, user):
     max_processes = int(getattr(settings, 'PERSON_LOOKUP_MAX_PROCESSES', 1) or 1)
-    lock_path = settings.BASE_DIR / 'person_lookup_spawn.lock'
-    log_path = settings.BASE_DIR / 'person_lookup_spawn.log'
+    lock_path = settings.RUN_DIR / 'person_lookup_spawn.lock'
+    log_path = settings.LOG_DIR / 'lookups' / 'people' / 'worker.log'
     def write_spawn_log(message):
         timestamp = timezone.now().isoformat()
         with open(log_path, 'a') as log_file:

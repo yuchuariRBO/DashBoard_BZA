@@ -1,0 +1,12 @@
+[Unit]
+Description=Bonanza - vigilancia de la cola de placas
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=60
+AccuracySec=5
+Unit=bonanza-plate-lookup-drain.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,8 +1,8 @@
 from django.test import TestCase, SimpleTestCase, override_settings
 from django.urls import reverse
-from .models import CustomUser, PersonLookupRecord
-from .services.person_identity import judicial_name, stored_identity
-from .person_lookup import save_person_lookup_result
+from ..models import CustomUser, PersonLookupRecord
+from ..services.person_identity import judicial_name, stored_identity
+from ..person_lookup import save_person_lookup_result
 
 
 class JudicialNameTests(SimpleTestCase):

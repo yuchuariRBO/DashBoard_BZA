@@ -1,0 +1,23 @@
+/root/bonanza/logs/application/*.log /root/bonanza/logs/errors/*.log /root/bonanza/logs/security/*.log /root/bonanza/logs/notifications/*.log /root/bonanza/logs/lookups/people/people.log /root/bonanza/logs/lookups/plates/plates.log {
+    daily
+    maxsize 25M
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root robiotec
+    su root root
+}
+
+/root/bonanza/logs/gunicorn/*.log /root/bonanza/logs/lookups/people/worker.log /root/bonanza/logs/lookups/plates/worker.log {
+    daily
+    maxsize 25M
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root root
+}

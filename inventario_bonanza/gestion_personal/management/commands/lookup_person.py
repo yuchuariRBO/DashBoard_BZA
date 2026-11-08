@@ -1,3 +1,4 @@
+import logging
 import signal
 
 from django.contrib.auth import get_user_model
@@ -7,6 +8,8 @@ from django.utils import timezone
 from gestion_personal.models import PersonLookupRecord
 from gestion_personal.person_lookup import consultar_persona_completa, normalize_cedula, save_person_lookup_result
 
+
+logger = logging.getLogger(__name__)
 
 class PersonLookupTimeout(Exception):
     pass
@@ -62,6 +65,7 @@ class Command(BaseCommand):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, previous_handler)
             record = save_person_lookup_result(result, user=user, record=record)
+            logger.info("Consulta finalizada: estado=%s", record.lookup_status)
             self.stdout.write(self.style.SUCCESS(f"Consulta finalizada: {record.cedula} ({record.lookup_status})"))
         except PersonLookupTimeout:
             PersonLookupRecord.objects.filter(pk=record.pk).update(

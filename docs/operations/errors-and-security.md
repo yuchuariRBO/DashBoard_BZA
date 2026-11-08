@@ -15,6 +15,6 @@ La propuesta de Nginx desactiva la versión del servidor, oculta X-Powered-By, b
 
 ## Límites
 
-Estas medidas reducen la información revelada en errores; no eliminan la posibilidad de descubrir rutas ni constituyen una auditoría completa de seguridad. Siguen pendientes los hallazgos de aislamiento de visitantes, visitas programadas y resultados de consultas descritos en AUDITORIA_2026-09-24.md. No se cambió la política de tokens ni se configuró limitación de solicitudes, que debe dimensionarse según los clientes reales y el proxy activo.
+Estas medidas reducen la información revelada en errores; no eliminan la posibilidad de descubrir rutas ni constituyen una auditoría completa de seguridad. Siguen pendientes los hallazgos de aislamiento de visitantes, visitas programadas y resultados de consultas descritos en ../audits/2026-09-24.md. No se cambió la política de tokens ni se configuró limitación de solicitudes, que debe dimensionarse según los clientes reales y el proxy activo.
 
 Referencias: https://docs.djangoproject.com/en/5.2/topics/http/views/#customizing-error-views y https://nginx.org/en/docs/http/ngx_http_core_module.html#error_page

@@ -9,7 +9,7 @@ from .services.lookup_sources import call_source, load_source_module
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONSULTA_PEOPLE_DIR = PROJECT_ROOT / "consulta_people"
+CONSULTA_PEOPLE_DIR = PROJECT_ROOT / "integrations" / "people"
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 PERSON_LOOKUP_FIELDS = [

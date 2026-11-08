@@ -21,9 +21,15 @@ Dashboard Django para gestion de personal, accesos, visitantes, vehiculos y cons
 - `inventario_bonanza/static/`: estaticos fuente versionables
 - `inventario_bonanza/media/`: archivos subidos localmente
 - `inventario_bonanza/staticfiles/`: salida local de `collectstatic`, no versionada
-- `consulta_people/`: fuentes de consulta para personas
-- `consulta_plates/`: fuentes de consulta para placas
-- `deploy/`: configuracion versionada de Nginx, SSH y Fail2ban
+- `integrations/people/`: fuentes de consulta para personas
+- `integrations/plates/`: fuentes de consulta para placas
+- `deploy/`: configuracion de Nginx, systemd, rotación de logs, SSH y Fail2ban
+- `docs/`: arquitectura, auditorías y guías de operación
+- `logs/`: registros separados por tipo, excluidos de Git
+- `run/`: bloqueos temporales de procesos, excluidos de Git
+- `inventario_bonanza/gestion_personal/tests/`: pruebas de regresión
+
+Consulta [la estructura y operación del proyecto](docs/architecture.md).
 
 ## Diseño del código
 
@@ -339,7 +345,7 @@ Ver logs:
 ```bash
 journalctl -u bonanza-gunicorn -f
 journalctl -u nginx -f
-tail -f logs/django.log
+tail -f logs/application/django.log
 ```
 
 Verificacion rapida:

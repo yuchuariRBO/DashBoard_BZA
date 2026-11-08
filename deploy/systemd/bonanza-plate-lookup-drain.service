@@ -1,0 +1,18 @@
+[Unit]
+Description=Bonanza - procesamiento de consultas de placas
+After=network-online.target bonanza-gunicorn.service
+Wants=network-online.target
+
+[Service]
+UMask=0027
+Type=simple
+WorkingDirectory=/root/bonanza/inventario_bonanza
+EnvironmentFile=/root/bonanza/.env
+ExecStart=/root/bonanza/venv/bin/python manage.py drain_plate_lookups --limit 0 --timeout-seconds 120 --stale-minutes 10 --sleep 5
+Restart=on-failure
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

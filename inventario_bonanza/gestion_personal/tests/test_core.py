@@ -11,17 +11,17 @@ from django.utils import timezone
 from django.db import connection
 from django.core.files.base import ContentFile
 
-from .forms import PermisoSalidaForm, RoomAssignmentForm, VacationRecordForm
-from .models import (
+from ..forms import PermisoSalidaForm, RoomAssignmentForm, VacationRecordForm
+from ..models import (
     AccidentCase, AnnualActivity, AttendanceRecord, CustomUser, DiningAssignmentHistory,
     DiningHall, HRAuditLog, HRInspection, MedicalLeaveCase, Organization, Person, PlateLookupRecord, Room,
     MonthlyWorkDay, PermisoSalida, RoomAssignment, RoomOccupancyMovement, SocialBenefitCase, UpcomingEntry,
     VisitaProgramada,
 )
-from .services.hr_analytics import management_dashboard_context
-from .services.people_import import import_people_dataframe
-from .services.detailed_people import search_detailed_people
-from .services.workdays import save_monthly_workdays
+from ..services.hr_analytics import management_dashboard_context
+from ..services.people_import import import_people_dataframe
+from ..services.detailed_people import search_detailed_people
+from ..services.workdays import save_monthly_workdays
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -725,7 +725,7 @@ class SecurityLookupAccessTests(TestCase):
     @patch('gestion_personal.views.start_person_lookup_process', return_value=True)
     @patch('gestion_personal.views.start_plate_lookup_process', return_value=True)
     def test_security_can_submit_queries(self, plate_start, person_start):
-        from .models import PersonLookupRecord
+        from ..models import PersonLookupRecord
         self.assertEqual(self.client.post(reverse('global_plate_lookup'), {'placa': 'ABC1234'}).status_code, 302)
         self.assertEqual(self.client.post(reverse('global_person_lookup'), {'cedula': '0102030405'}).status_code, 302)
         plate_start.assert_called_once_with('ABC1234', self.user)

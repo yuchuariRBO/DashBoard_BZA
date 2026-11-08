@@ -9,7 +9,7 @@ from .services.lookup_sources import call_source, load_source_module
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONSULTA_PLATES_DIR = PROJECT_ROOT / "consulta_plates"
+CONSULTA_PLATES_DIR = PROJECT_ROOT / "integrations" / "plates"
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 

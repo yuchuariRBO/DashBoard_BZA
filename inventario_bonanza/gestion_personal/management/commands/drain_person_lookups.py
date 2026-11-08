@@ -22,7 +22,7 @@ class Command(BaseCommand):
         parser.add_argument("--sleep", type=float, default=2.0)
 
     def handle(self, *args, **options):
-        lock_path = settings.BASE_DIR / "person_lookup_drain.lock"
+        lock_path = settings.RUN_DIR / "person_lookup_drain.lock"
         with open(lock_path, "w") as lock_file:
             try:
                 fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -57,14 +57,15 @@ class Command(BaseCommand):
                     str(timeout_seconds),
                 ]
                 try:
-                    subprocess.run(
-                        command,
-                        cwd=str(settings.BASE_DIR),
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=timeout_seconds + 5,
-                        check=True,
-                    )
+                    with (settings.LOG_DIR / "lookups" / "people" / "worker.log").open("ab") as output_log:
+                        subprocess.run(
+                            command,
+                            cwd=str(settings.BASE_DIR),
+                            stdout=output_log,
+                            stderr=output_log,
+                            timeout=timeout_seconds + 5,
+                            check=True,
+                        )
                     processed += 1
                 except subprocess.TimeoutExpired:
                     timed_out += 1

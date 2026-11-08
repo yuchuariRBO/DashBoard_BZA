@@ -1,6 +1,6 @@
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from .models import CustomUser, PersonLookupRecord
+from ..models import CustomUser, PersonLookupRecord
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

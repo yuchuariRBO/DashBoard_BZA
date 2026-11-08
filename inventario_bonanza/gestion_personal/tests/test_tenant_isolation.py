@@ -3,8 +3,8 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.core.management import call_command
 from django.urls import reverse
-from .models import CustomUser, Organization, VisitorRecord, VisitaProgramada, PlateLookupRecord, PersonLookupRecord
-from .services.scoping import organization_records_for
+from ..models import CustomUser, Organization, VisitorRecord, VisitaProgramada, PlateLookupRecord, PersonLookupRecord
+from ..services.scoping import organization_records_for
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

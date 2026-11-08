@@ -3,8 +3,8 @@ from urllib.parse import urlsplit
 from bs4 import BeautifulSoup
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from .models import CustomUser, Organization, Person
-from .services.roles import DASHBOARD_BY_ROLE
+from ..models import CustomUser, Organization, Person
+from ..services.roles import DASHBOARD_BY_ROLE
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -54,7 +54,7 @@ class ProfileNavigationTests(TestCase):
 @override_settings(SECURE_SSL_REDIRECT=False)
 class SecondaryRouteAuditTests(ProfileNavigationTests):
     def test_static_routes_do_not_crash(self):
-        from .urls import urlpatterns
+        from ..urls import urlpatterns
         for user in self.users:
             self.client.force_login(user)
             for pattern in urlpatterns:
@@ -69,7 +69,7 @@ class SecondaryRouteAuditTests(ProfileNavigationTests):
 @override_settings(SECURE_SSL_REDIRECT=False)
 class AuditOrganizationIsolationTests(TestCase):
     def test_operator_cannot_exit_another_organizations_vehicle(self):
-        from .models import VehicleRecord
+        from ..models import VehicleRecord
         first = Organization.objects.create(name='Vehicles A', slug='vehicles-a')
         second = Organization.objects.create(name='Vehicles B', slug='vehicles-b')
         operator = CustomUser.objects.create_user(username='operator-a', user_type='operador', organization=first)
@@ -86,7 +86,7 @@ class AuditOrganizationIsolationTests(TestCase):
         self.assertIsNotNone(vehicle.fecha_salida)
 
     def test_epp_person_selector_is_organization_scoped(self):
-        from .forms import EPPAssignmentForm
+        from ..forms import EPPAssignmentForm
         first = Organization.objects.create(name='EPP A', slug='epp-a')
         second = Organization.objects.create(name='EPP B', slug='epp-b')
         technician = CustomUser.objects.create_user(username='technician-a', user_type='tecnico_seguridad', organization=first)

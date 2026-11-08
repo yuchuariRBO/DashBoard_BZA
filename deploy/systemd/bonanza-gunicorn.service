@@ -1,0 +1,17 @@
+[Unit]
+Description=Bonanza Dashboard Gunicorn
+After=network.target
+
+[Service]
+UMask=0027
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/bonanza/inventario_bonanza
+EnvironmentFile=/root/bonanza/.env
+ExecStart=/root/bonanza/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 --access-logfile /root/bonanza/logs/gunicorn/access.log --error-logfile /root/bonanza/logs/gunicorn/error.log --capture-output inventario_bonanza.wsgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

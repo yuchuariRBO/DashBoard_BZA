@@ -1,3 +1,4 @@
+import logging
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -6,6 +7,8 @@ import signal
 from gestion_personal.models import PlateLookupRecord
 from gestion_personal.plate_lookup import consultar_placa_completa, normalize_plate, plate_variants, save_plate_lookup_result
 
+
+logger = logging.getLogger(__name__)
 
 class PlateLookupTimeout(Exception):
     pass
@@ -61,6 +64,7 @@ class Command(BaseCommand):
             signal.alarm(0)
             signal.signal(signal.SIGALRM, previous_handler)
             record = save_plate_lookup_result(result, user=user, record=record)
+            logger.info("Consulta finalizada: estado=%s", record.lookup_status)
             self.stdout.write(self.style.SUCCESS(f"Consulta finalizada: {record.placa} ({record.lookup_status})"))
         except PlateLookupTimeout as exc:
             PlateLookupRecord.objects.filter(pk=record.pk).update(

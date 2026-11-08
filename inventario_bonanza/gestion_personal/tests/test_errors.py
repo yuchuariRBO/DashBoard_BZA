@@ -2,7 +2,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, Client, override_settings
 from django.urls import path
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
-from . import error_views
+from .. import error_views
 
 
 def broken(request):

@@ -36,3 +36,6 @@ MinIO/
 # Editors and OS files
 .DS_Store
 Thumbs.db
+
+# Process locks and temporary runtime state
+run/

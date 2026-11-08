@@ -2,7 +2,7 @@
 
 1. Aplica la migración `0019_telegramalertsettings` con `manage.py migrate`.
 2. En la pestaña **Alertas**, guarda el token del bot y al menos un ID de alertas del servidor.
-3. Copia `telegram-robio.conf` a `/etc/fail2ban/action.d/telegram-robio.conf`.
+3. Copia `deploy/security/fail2ban/action.d/telegram-robio.conf` a `/etc/fail2ban/action.d/telegram-robio.conf`.
 4. Añade `telegram-robio` a las acciones del jail `sshd`, por ejemplo:
 
 ```ini
