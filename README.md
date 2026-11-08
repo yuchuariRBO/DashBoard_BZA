@@ -225,6 +225,8 @@ Las alertas también cuentan con una pantalla de configuración y el modelo `Tel
 | `minio.service` | Almacenamiento local de objetos | `deploy/systemd/minio.service` |
 | `nginx.service` | Proxy HTTPS y archivos estáticos | `deploy/nginx/` |
 | `logrotate.timer` | Ejecuta la rotación del sistema | Regla del proyecto: `deploy/logrotate/bonanza` |
+| `bonanza-weekly-cleanup.timer` | Limpieza semanal, domingos 03:30 UTC con hasta 15 minutos de retraso | `deploy/systemd/bonanza-weekly-cleanup.timer` |
+| `bonanza-weekly-cleanup.service` | Cachés antiguas, paquetes descargados y journal archivado | `deploy/scripts/weekly_cleanup.py` |
 | `fail2ban.service` | Protección de acceso SSH y posibles alertas | `deploy/security/fail2ban/` |
 
 El timer de placas usa `OnBootSec=30`, `OnUnitInactiveSec=60` y `AccuracySec=5`. No ejecuta una consulta cada minuto si el drenador anterior sigue activo. Los workers de personas también pueden iniciarse desde la aplicación; no se incluye una unidad systemd activa dedicada a personas en este despliegue.
@@ -285,6 +287,7 @@ Las rutas bajo `/root/` y el archivo `.env` tienen permisos restringidos; alguno
 | `lookups/plates/worker.log` | Salida y errores de subprocesos de placas |
 | `gunicorn/access.log` | Solicitudes recibidas por Gunicorn |
 | `gunicorn/error.log` | Arranque, errores de Gunicorn y salida capturada |
+| `maintenance/weekly-cleanup.log` | Pasos y resultados de la limpieza semanal de la VM |
 
 Los archivos se crean cuando se emite su primer evento. Que una carpeta esté vacía no significa que el servicio esté fallando. Los registros históricos anteriores a la reorganización se conservaron en `application/django.log`; no se intentó clasificarlos retrospectivamente.
 
@@ -488,6 +491,21 @@ sudo journalctl -u minio -n 100 --no-pager
 
 ## Mantenimiento y seguridad
 
+La VM dispone de una limpieza semanal mediante `bonanza-weekly-cleanup.timer`:
+domingos a las **03:30 UTC**, con hasta 15 minutos de retraso aleatorio y recuperación
+de ejecuciones perdidas. Limpia paquetes APT descargados, journal archivado y archivos
+de caché de pip y descargas de extensiones VS Code con más de 30 días. También evalúa
+la rotación existente de logs sin forzarla. Conserva datos, fotografías, documentos,
+respaldos, consultas, dependencias y bloqueos de la plataforma.
+
+Consultar [alcance, simulación, instalación y diagnóstico de la limpieza semanal](docs/operations/weekly-cleanup.md).
+
+```bash
+systemctl list-timers bonanza-weekly-cleanup.timer --all
+sudo systemctl start bonanza-weekly-cleanup.service
+sudo journalctl -u bonanza-weekly-cleanup.service -n 100 --no-pager
+```
+
 - Mantener `.env`, los tokens y los respaldos de personal fuera de los commits. No incluir credenciales reales en ejemplos, incidencias o logs compartidos.
 - No borrar `db.sqlite3`, `MinIO/`, migraciones, `venv/` ni `staticfiles/` como limpieza rutinaria: son datos o componentes utilizados por la instalación.
 - Limpiar únicamente cachés regenerables y logs antiguos mediante sus mecanismos de retención. Conservar los bloqueos mientras haya procesos activos.
@@ -503,6 +521,7 @@ sudo journalctl -u minio -n 100 --no-pager
 - [Auditoría de septiembre y decisiones de aislamiento](docs/audits/2026-09-24.md).
 - [Páginas de error y configuración de seguridad](docs/operations/errors-and-security.md), documento histórico con el alcance de aquella intervención.
 - [Alertas de Fail2ban por Telegram](docs/operations/fail2ban.md).
+- [Servicio y temporizador de limpieza semanal de la VM](docs/operations/weekly-cleanup.md).
 - [Configuración central de logging](inventario_bonanza/inventario_bonanza/logging_config.py).
 - [Servicios systemd](deploy/systemd/) y [regla de rotación](deploy/logrotate/bonanza).
 - [Plantilla de variables de entorno](.env.example).

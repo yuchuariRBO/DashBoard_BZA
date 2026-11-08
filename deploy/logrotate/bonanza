@@ -1,4 +1,4 @@
-/root/bonanza/logs/application/*.log /root/bonanza/logs/errors/*.log /root/bonanza/logs/security/*.log /root/bonanza/logs/notifications/*.log /root/bonanza/logs/lookups/people/people.log /root/bonanza/logs/lookups/plates/plates.log {
+/root/bonanza/logs/application/*.log /root/bonanza/logs/errors/*.log /root/bonanza/logs/security/*.log /root/bonanza/logs/notifications/*.log /root/bonanza/logs/maintenance/*.log /root/bonanza/logs/lookups/people/people.log /root/bonanza/logs/lookups/plates/plates.log {
     daily
     maxsize 25M
     rotate 14

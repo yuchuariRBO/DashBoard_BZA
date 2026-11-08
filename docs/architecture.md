@@ -33,7 +33,8 @@ bonanza/
 │   ├── notifications/notifications.log
 │   ├── lookups/people/        # people.log y worker.log
 │   ├── lookups/plates/        # plates.log y worker.log
-│   └── gunicorn/             # access.log y error.log
+│   ├── gunicorn/             # access.log y error.log
+│   └── maintenance/          # weekly-cleanup.log
 ├── run/                      # Bloqueos de concurrencia; no borrar en ejecución
 ├── MinIO/                    # Fotografías y documentos; no manipular a mano
 ├── venv/                     # Dependencias activas de Python
@@ -80,6 +81,25 @@ se instala en `/etc/logrotate.d/bonanza`: rotación diaria, 14 copias y compresi
 Gunicorn y el log de salida del worker usan copytruncate para conservar sus descriptores;
 existe una pequeña ventana de posible pérdida de líneas durante esa rotación.
 Los logs pueden contener identificadores; se deben proteger y no subir a Git.
+
+## Limpieza semanal de la VM
+
+`bonanza-weekly-cleanup.timer` ejecuta una unidad `oneshot` cada domingo a las
+03:30 UTC, con hasta 15 minutos de retraso y recuperación de ejecuciones perdidas.
+El script vive en `deploy/scripts/weekly_cleanup.py` y registra sus resultados
+en `logs/maintenance/weekly-cleanup.log` y en el journal de systemd.
+Su directorio de bloqueo es independiente de los workers de consultas.
+
+El servicio limpia descargas de APT, journal archivado y cachés permitidas de más
+de 30 días. También evalúa la rotación de Bonanza sin forzarla. No recorre datos,
+fotografías, documentos, respaldos, dependencias ni los bloqueos de la aplicación.
+La unidad aplica un sistema de archivos de solo lectura con excepciones acotadas.
+Ver [operación y alcance](operations/weekly-cleanup.md).
+
+La primera ejecución completó todos los pasos con código 0. Se comprobó que el
+hash de SQLite y los tamaños y fechas de los archivos del personal en MinIO no
+cambiaron. Las cuatro pruebas de limpieza cubren antigüedad, simulación y rechazo
+de enlaces simbólicos hacia datos ajenos a las cachés.
 
 ## Validación
 
